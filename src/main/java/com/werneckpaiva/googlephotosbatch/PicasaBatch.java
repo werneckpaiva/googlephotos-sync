@@ -34,7 +34,7 @@ public class PicasaBatch {
 
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
 
-    private static final Pattern ALLOWED_FILES_PATTERN = Pattern.compile("\\.jpg$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ALLOWED_FILES_PATTERN = Pattern.compile("\\.(jpg|mp4)$", Pattern.CASE_INSENSITIVE);
 
     private static final List<String> REQUIRED_SCOPES =
             ImmutableList.of(
@@ -54,7 +54,7 @@ public class PicasaBatch {
         }
     }
 
-    public void run() throws IOException, GeneralSecurityException {
+    public void run() throws Exception {
         try (PhotosLibraryClient photosLibraryClient = createPhotosLibraryClient()) {
 
             GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(photosLibraryClient);
@@ -101,7 +101,7 @@ public class PicasaBatch {
                 .build();
     }
 
-    private void uploadFoldersRecursively(GooglePhotosAlbums googlePhotosAlbums, File path){
+    private void uploadFoldersRecursively(GooglePhotosAlbums googlePhotosAlbums, File path) throws Exception {
         List<File> files = new ArrayList<>();
         List<File> dirs = new ArrayList<>();
         for (File file : path.listFiles()){

@@ -14,4 +14,10 @@ public class AlbumUtils {
         return path;
     }
 
+    public static String file2MediaName(File fullPath){
+        return fullPath.getName()
+                .replaceAll("\\.[a-zA-Z0-9]{3}", "")
+                .replace('_', ' ');
+    }
+
 }
