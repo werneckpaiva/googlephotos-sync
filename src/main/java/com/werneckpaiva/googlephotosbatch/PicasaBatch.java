@@ -45,21 +45,29 @@ public class PicasaBatch {
 
     public static void main(String[] args){
         baseFolder = args[0];
+        String processFolder = baseFolder;
+        if (args.length >= 2){
+            processFolder = args[1];
+        }
+        if (!processFolder.startsWith(baseFolder)){
+            System.err.println("Processing folder must be included in the base folder");
+            System.exit(1);
+        }
 
         PicasaBatch picasaBatch = new PicasaBatch();
         try {
-            picasaBatch.run();
+            picasaBatch.run(processFolder);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    public void run() throws Exception {
+    public void run(String processFolder) throws Exception {
         try (PhotosLibraryClient photosLibraryClient = createPhotosLibraryClient()) {
 
             GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(photosLibraryClient);
 
-            uploadFoldersRecursively(googlePhotosAlbums, new File(baseFolder));
+            uploadFoldersRecursively(googlePhotosAlbums, new File(processFolder));
         } catch (ApiException e) {
             e.printStackTrace();
         }

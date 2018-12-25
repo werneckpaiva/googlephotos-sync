@@ -1,6 +1,8 @@
 package com.werneckpaiva.googlephotosbatch;
 
+import com.google.api.core.ApiFuture;
 import com.google.api.gax.rpc.ApiException;
+import com.google.api.gax.rpc.InvalidArgumentException;
 import com.google.photos.library.v1.PhotosLibraryClient;
 import com.google.photos.library.v1.internal.InternalPhotosLibraryClient;
 import com.google.photos.library.v1.proto.*;
@@ -15,6 +17,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -39,6 +42,13 @@ public class GooglePhotosAlbums {
         }
     }
 
+    private static Comparator<NewMediaItem> MEDIA_COMPARATOR = new Comparator<NewMediaItem>() {
+        @Override
+        public int compare(NewMediaItem media1, NewMediaItem media2) {
+            return media1.getDescription().compareTo(media2.getDescription());
+        }
+    };
+
     public GooglePhotosAlbums(PhotosLibraryClient photosLibraryClient){
         this.photosLibraryClient = photosLibraryClient;
     }
@@ -58,7 +68,7 @@ public class GooglePhotosAlbums {
             if (i++ % 100 == 0) System.out.print(".");
             allAlbums.put(album.getTitle(), album);
         }
-        System.out.println(allAlbums.size()+ " albuns loaded (" + (System.currentTimeMillis() - startTime) + " ms)");
+        System.out.println(" " + allAlbums.size()+ " albuns loaded (" + (System.currentTimeMillis() - startTime) + " ms)");
         return allAlbums;
     }
 
@@ -76,31 +86,64 @@ public class GooglePhotosAlbums {
         return album;
     }
 
-    public void batchUploadFiles(Album album, List<File> files) throws IOException, ExecutionException, InterruptedException {
-        System.out.println("Album: "+album.getTitle());
-        final Set<String> albumFileNames = retrieveFilesFromAlbum(album);
+    public void batchUploadFiles(Album album, List<File> files) {
+        try {
+            System.out.println("Album: " + album.getTitle());
+            final Set<String> albumFileNames = retrieveFilesFromAlbum(album);
 
-        ForkJoinPool customThreadPool = new ForkJoinPool(4);
-        List<NewMediaItem> newMediaItems = customThreadPool.submit(() -> files.parallelStream()
-                .map(file -> new MediaWithName(AlbumUtils.file2MediaName(file), file))
-                .filter(media -> !albumFileNames.contains(media.name))
-                .map(media ->
-                    (JPEG_PATTERN.matcher(media.file.getName()).find()) ?
-                            new MediaWithName(media.name, ImageUtils.resizeJPGImage(media.file, MAX_FREE_DIMENSION)) :
-                            media
-                )
-                .map(media -> uploadSingleFile(media.name, media.file))
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList())).get();
-        if (!newMediaItems.isEmpty()){
-            System.out.println(" Setting " + newMediaItems.size() + " medias to album: " + album.getTitle());
-            BatchCreateMediaItemsResponse mediasToAlbumresponse = photosLibraryClient.batchCreateMediaItems(album.getId(), newMediaItems);
-            for (NewMediaItemResult itemsResponse : mediasToAlbumresponse.getNewMediaItemResultsList()) {
-                Status status = itemsResponse.getStatus();
-                if (status.getCode() != Code.OK_VALUE) {
-                    System.out.println(" Error setting item to album: "+status.getCode()+ " - " + status.getMessage());
+            List<MediaWithName> mediasToUpload = files.stream()
+                    .map(file -> new MediaWithName(AlbumUtils.file2MediaName(file), file))
+                    .filter(media -> !albumFileNames.contains(media.name))
+                    .collect(Collectors.toList());
+
+            if (mediasToUpload.size() == 0) return;
+
+            if (!album.getIsWriteable()){
+                System.out.println("ERROR: album is not writable");
+                return;
+            }
+
+            ForkJoinPool customThreadPool = new ForkJoinPool(4);
+            List<NewMediaItem> newMediaItems =
+                    customThreadPool.submit(() -> mediasToUpload.parallelStream()
+                    .map(media ->
+                            (JPEG_PATTERN.matcher(media.file.getName()).find()) ?
+                                    new MediaWithName(media.name, ImageUtils.resizeJPGImage(media.file, MAX_FREE_DIMENSION)) :
+                                    media
+                    )
+                    .map(media -> uploadSingleFile(media.name, media.file))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList())).get();
+
+            newMediaItems.sort(MEDIA_COMPARATOR);
+
+            if (!newMediaItems.isEmpty()) {
+                System.out.println("Adding " + newMediaItems.size() + " medias to album: " + album.getTitle());
+                Iterator<NewMediaItem> newMediasIterator = newMediaItems.iterator();
+                while (newMediasIterator.hasNext()) {
+                    List<NewMediaItem> mediasToSubmit = new ArrayList<>();
+                    while (mediasToSubmit.size() < 50 && newMediasIterator.hasNext())
+                        mediasToSubmit.add(newMediasIterator.next());
+
+                    BatchCreateMediaItemsRequest albumMediaItemsRequest = BatchCreateMediaItemsRequest.newBuilder()
+                            .setAlbumId(album.getId())
+                            .addAllNewMediaItems(mediasToSubmit)
+                            .build();
+                    ApiFuture<BatchCreateMediaItemsResponse> apiFuture = photosLibraryClient.batchCreateMediaItemsCallable()
+                            .futureCall(albumMediaItemsRequest);
+                    BatchCreateMediaItemsResponse mediasToAlbumResponse = apiFuture.get();
+                    for (NewMediaItemResult itemsResponse : mediasToAlbumResponse.getNewMediaItemResultsList()) {
+                        Status status = itemsResponse.getStatus();
+                        if (status.getCode() != Code.OK_VALUE) {
+                            System.out.println("Error setting item to album: " + status.getCode() + " - " + status.getMessage());
+                        }
+                    }
+
                 }
             }
+        } catch(ExecutionException | InterruptedException e){
+            System.out.println("Error adding medias to album");
+            e.printStackTrace();
         }
     }
 

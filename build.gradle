@@ -9,6 +9,7 @@ sourceCompatibility = 1.8
 
 repositories {
     mavenCentral()
+    maven { url "https://repository.apache.org/content/repositories/snapshots/" }
 }
 
 sourceSets {
@@ -22,6 +23,16 @@ sourceSets {
     }
 }
 
+jar {
+    manifest {
+        attributes "Main-Class": "com.werneckpaiva.googlephotosbatch.PicasaBatch"
+    }
+
+    from {
+        configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
 dependencies {
     compile 'com.google.oauth-client:google-oauth-client-jetty:1.23.0'
     compile 'com.google.oauth-client:google-oauth-client-java6:1.23.0'
@@ -29,6 +40,13 @@ dependencies {
     compile('com.google.api-client:google-api-client:1.23.0') {
         exclude group: 'com.google.guava', module: 'guava-jdk5'
     }
+
+    compile 'org.apache.commons:commons-imaging:1.0-SNAPSHOT'
+    compile 'commons-io:commons-io:2.6'
+    compile 'org.imgscalr:imgscalr-lib:4.2'
+
+
+
     compile 'io.grpc:grpc-netty:1.13.2'
     compile 'io.netty:netty-tcnative-boringssl-static:2.0.8.Final'
 

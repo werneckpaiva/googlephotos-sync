@@ -1,72 +1,92 @@
 package com.werneckpaiva.googlephotosbatch;
 
-import javax.imageio.*;
-import javax.imageio.metadata.IIOMetadata;
-import javax.imageio.plugins.jpeg.JPEGImageWriteParam;
-import javax.imageio.stream.ImageOutputStream;
-import java.awt.*;
+import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.common.ImageMetadata;
+import org.apache.commons.imaging.formats.jpeg.JpegImageMetadata;
+import org.apache.commons.imaging.formats.jpeg.exif.ExifRewriter;
+import org.apache.commons.imaging.formats.tiff.TiffImageMetadata;
+import org.apache.commons.io.IOUtils;
+import org.imgscalr.Scalr;
+
+import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 
 public class ImageUtils {
 
-    public static File resizeJPGImage(File file, int maxDimension) {
-        try {
-            final ImageReader jpegImageReader = ImageIO.getImageReadersByFormatName("jpeg").next();
-            jpegImageReader.setInput(ImageIO.createImageInputStream(file));
-            BufferedImage inputImage = jpegImageReader.read(0);
+    public static File resizeJPGImage(File inputFile, int maxDimension) {
+        try{
+            FileInputStream fileInputStream = new FileInputStream(inputFile);
 
-            int inputWidth = inputImage.getWidth();
-            int inputHeight = inputImage.getHeight();
+            byte[] imageData = IOUtils.toByteArray(fileInputStream);
+            fileInputStream.close();
+
+            BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageData));
+
+            // Resize the image if necessary
+            int inputWidth = image.getWidth();
+            int inputHeight = image.getHeight();
             if (inputWidth <= maxDimension && inputHeight <= maxDimension) {
-                return file;
+                return inputFile;
             }
-            float ratio = Float.valueOf(inputWidth) / Float.valueOf(inputHeight);
-            int outputWidth = 0, outputHeight = 0;
-            if (ratio > 0) {
-                outputWidth = maxDimension;
-                outputHeight = Math.round(maxDimension / ratio);
+
+            System.out.println("Resizing " + inputFile.getName() +
+                    " (" + inputWidth + ", " + inputHeight + ") to (" + maxDimension + ")");
+
+            // Save existing metadata, if any
+            TiffImageMetadata metadata = readExifMetadata(imageData);
+
+            // resize
+            image = Scalr.resize(image, maxDimension);
+            image.flush();
+
+            // rewrite resized image as byte[]
+            byte[] resizedData = writeJPEG(image);
+
+            // Re-code resizedData + metadata to imageData
+            if (metadata != null) {
+                imageData = writeExifMetadata(metadata, resizedData);
             } else {
-                outputHeight = maxDimension;
-                outputWidth = Math.round(maxDimension * ratio);
-            }
-
-            System.out.println("Resizing " + file.getName() +
-                    " (" + inputWidth + ", " + inputHeight + ") to (" + outputWidth + ", " + outputHeight + ")");
-
-            IIOMetadata imageMetadata = null;
-            try {
-                imageMetadata = jpegImageReader.getImageMetadata(0);
-            } catch (javax.imageio.IIOException e) {
-                System.out.println("Couldn't read image exif");
+                imageData = resizedData;
             }
             File outputFile = File.createTempFile("resized", ".jpg");
-
-            BufferedImage outputBufferedImage = new BufferedImage(outputWidth, outputHeight, inputImage.getType());
-            Graphics2D g2d = outputBufferedImage.createGraphics();
-            g2d.drawImage(inputImage, 0, 0, outputWidth, outputHeight, null);
-            g2d.dispose();
-
-            final ImageWriter writer = ImageIO.getImageWritersByFormatName("jpeg").next();
-
-            ImageOutputStream imageOutputStream = ImageIO.createImageOutputStream(outputFile);
-            writer.setOutput(imageOutputStream);
-
-            JPEGImageWriteParam imageWriteParam = (JPEGImageWriteParam) writer.getDefaultWriteParam();
-            imageWriteParam.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-            imageWriteParam.setCompressionQuality(.9f);
-            imageWriteParam.setOptimizeHuffmanTables(true);
-
-            writer.write(null, new IIOImage(outputBufferedImage, null, imageMetadata), imageWriteParam);
-            writer.dispose();
-
-            ImageIO.write(outputBufferedImage, "jpg", imageOutputStream);
-
+            FileOutputStream fileOutputStream = new FileOutputStream(outputFile);
+            IOUtils.write(imageData,  fileOutputStream);
+            fileOutputStream.close();
             return outputFile;
-        } catch(IOException e) {
-            return file;
+        } catch (IOException|ImageWriteException|ImageReadException e) {
+            System.out.println("Couldn't resize "+inputFile);
+            e.printStackTrace();
+            return inputFile;
         }
+    }
+
+    private static TiffImageMetadata readExifMetadata(byte[] jpegData) throws ImageReadException, IOException {
+        ImageMetadata imageMetadata = Imaging.getMetadata(jpegData);
+        if (imageMetadata == null) {
+            return null;
+        }
+        JpegImageMetadata jpegMetadata = (JpegImageMetadata)imageMetadata;
+        TiffImageMetadata exif = jpegMetadata.getExif();
+        return exif;
+    }
+
+    private static byte[] writeExifMetadata(TiffImageMetadata metadata, byte[] jpegData)
+            throws ImageReadException, ImageWriteException, IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ExifRewriter exifRewriter = new ExifRewriter();
+        exifRewriter.updateExifMetadataLossless(jpegData, out, metadata.getOutputSet());
+        out.close();
+        return out.toByteArray();
+    }
+
+    private static byte[] writeJPEG(BufferedImage image) throws IOException {
+        ByteArrayOutputStream jpegOut = new ByteArrayOutputStream();
+        ImageIO.write(image, "JPEG", jpegOut);
+        jpegOut.close();
+        return jpegOut.toByteArray();
     }
 
 }
