@@ -2,7 +2,6 @@ package com.werneckpaiva.googlephotosbatch;
 
 import com.google.api.core.ApiFuture;
 import com.google.api.gax.rpc.ApiException;
-import com.google.api.gax.rpc.InvalidArgumentException;
 import com.google.photos.library.v1.PhotosLibraryClient;
 import com.google.photos.library.v1.internal.InternalPhotosLibraryClient;
 import com.google.photos.library.v1.proto.*;
@@ -17,7 +16,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
