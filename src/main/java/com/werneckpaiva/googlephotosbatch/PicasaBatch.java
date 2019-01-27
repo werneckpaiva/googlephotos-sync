@@ -18,10 +18,7 @@ import com.google.photos.library.v1.PhotosLibraryClient;
 import com.google.photos.library.v1.PhotosLibrarySettings;
 import com.google.photos.library.v1.proto.Album;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,7 +26,7 @@ import java.util.regex.Pattern;
 
 public class PicasaBatch {
 
-    private static final File CREDENTIALS_APP_FILE = new File("credentials.json");
+
     private static final File CREDENTIALS_DATA_FILE = new File( "credentials");
 
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
@@ -41,33 +38,45 @@ public class PicasaBatch {
                     "https://www.googleapis.com/auth/photoslibrary.readonly",
                     "https://www.googleapis.com/auth/photoslibrary.appendonly");
 
-    private static String baseFolder = null;
+//    private static String baseFolder = null;
 
     public static void main(String[] args){
-        baseFolder = args[0];
-        String processFolder = baseFolder;
+
+
+
+        String baseFolder = args[0];
+        List<String> foldersToProcess = new ArrayList<String>();
         if (args.length >= 2){
-            processFolder = args[1];
-        }
-        if (!processFolder.startsWith(baseFolder)){
-            System.err.println("Processing folder must be included in the base folder");
-            System.exit(1);
+            for (int i=1; i<args.length; i++){
+                String processFolder = args[i];
+                if (!processFolder.startsWith(baseFolder)){
+                    System.err.println("Processing folder must be included in the base folder");
+                    System.exit(1);
+                }
+                foldersToProcess.add(processFolder);
+            }
+        } else {
+            foldersToProcess.add(baseFolder);
         }
 
         PicasaBatch picasaBatch = new PicasaBatch();
         try {
-            picasaBatch.run(processFolder);
+            picasaBatch.run(baseFolder, foldersToProcess);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    public void run(String processFolder) throws Exception {
+    public void run(String baseFolder, List<String> foldersToProcess) throws Exception {
         try (PhotosLibraryClient photosLibraryClient = createPhotosLibraryClient()) {
 
             GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(photosLibraryClient);
 
-            uploadFoldersRecursively(googlePhotosAlbums, new File(processFolder));
+            for(String folderToProcess : foldersToProcess){
+                File folderFile = new File(folderToProcess);
+                uploadFoldersRecursively(googlePhotosAlbums, baseFolder, folderFile);
+            }
+
         } catch (ApiException e) {
             e.printStackTrace();
         }
@@ -84,9 +93,11 @@ public class PicasaBatch {
     }
 
     private static Credentials getUserCredentials() throws IOException, GeneralSecurityException {
+        InputStream credentialsInputStream = PicasaBatch.class
+                .getClassLoader().getResourceAsStream("credentials.json");
         GoogleClientSecrets clientSecrets =
                 GoogleClientSecrets.load(JSON_FACTORY,
-                        new InputStreamReader(new FileInputStream(CREDENTIALS_APP_FILE)));
+                        new InputStreamReader(credentialsInputStream));
         String clientId = clientSecrets.getDetails().getClientId();
         String clientSecret = clientSecrets.getDetails().getClientSecret();
 
@@ -109,7 +120,7 @@ public class PicasaBatch {
                 .build();
     }
 
-    private void uploadFoldersRecursively(GooglePhotosAlbums googlePhotosAlbums, File path) throws Exception {
+    private void uploadFoldersRecursively(GooglePhotosAlbums googlePhotosAlbums, String baseFolder, File path) throws Exception {
         List<File> files = new ArrayList<>();
         List<File> dirs = new ArrayList<>();
         for (File file : path.listFiles()){
@@ -130,7 +141,7 @@ public class PicasaBatch {
             googlePhotosAlbums.batchUploadFiles(album, files);
         }
         for (File dir : dirs){
-            uploadFoldersRecursively(googlePhotosAlbums, dir);
+            uploadFoldersRecursively(googlePhotosAlbums, baseFolder, dir);
         }
     }
 

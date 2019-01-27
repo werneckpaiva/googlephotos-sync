@@ -81,7 +81,8 @@ public class GooglePhotosAlbums {
 
     public Album createAlbum(String albumName) {
         System.out.println("Creating album " + albumName);
-        Album album = photosLibraryClient.createAlbum(albumName);
+        Album album = photosLibraryClient.createAlbum(albumName)
+                .toBuilder().setIsWriteable(true).build();;
         this.albums.put(albumName, album);
         return album;
     }
