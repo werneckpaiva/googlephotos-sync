@@ -20,8 +20,7 @@ import com.google.photos.library.v1.proto.Album;
 
 import java.io.*;
 import java.security.GeneralSecurityException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Pattern;
 
 public class PicasaBatch {
@@ -31,20 +30,19 @@ public class PicasaBatch {
 
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
 
-    private static final Pattern ALLOWED_FILES_PATTERN = Pattern.compile("\\.(jpg|mp4)$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ALLOWED_FILES_PATTERN = Pattern.compile("\\.(jpg|mp4|mov)$", Pattern.CASE_INSENSITIVE);
 
     private static final List<String> REQUIRED_SCOPES =
             ImmutableList.of(
                     "https://www.googleapis.com/auth/photoslibrary.readonly",
                     "https://www.googleapis.com/auth/photoslibrary.appendonly");
 
-//    private static String baseFolder = null;
-
     public static void main(String[] args){
-
-
-
         String baseFolder = args[0];
+        if (baseFolder.length() < 1){
+            System.out.println("Usage: <base_folder> [folders...]");
+            System.exit(1);
+        }
         List<String> foldersToProcess = new ArrayList<String>();
         if (args.length >= 2){
             for (int i=1; i<args.length; i++){

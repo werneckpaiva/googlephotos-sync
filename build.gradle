@@ -49,6 +49,7 @@ dependencies {
     compile 'com.google.api:gax:1.33.1',
             'com.google.api:gax-grpc:1.33.1'
 
+    compile 'com.google.api.grpc:proto-google-common-protos:1.12.0'
 
     compile 'io.grpc:grpc-netty:1.13.2'
     compile 'io.netty:netty-tcnative-boringssl-static:2.0.8.Final'
