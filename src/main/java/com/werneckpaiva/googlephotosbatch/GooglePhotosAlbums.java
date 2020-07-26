@@ -16,7 +16,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ForkJoinPool;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -65,15 +64,26 @@ public class GooglePhotosAlbums {
                 .build();
 
         long startTime = System.currentTimeMillis();
-        InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = photosLibraryClient.listAlbums(listAlbumsRequest);
         Map<String, Album> allAlbums = new HashMap<>();
-        int i=1;
-        for (Album album : listAlbumsResponse.iterateAll()){
-            if (i++ % 100 == 0) System.out.print(".");
-            allAlbums.put(album.getTitle(), album);
+        byte retry = 0;
+        while (retry++ < 100) {
+            try {
+                InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = photosLibraryClient.listAlbums(listAlbumsRequest);
+                int i = 1;
+                for (Album album : listAlbumsResponse.iterateAll()) {
+                    if (i++ % 100 == 0) {
+                        System.out.print(".");
+                    }
+                    allAlbums.put(album.getTitle(), album);
+                }
+                break;
+            } catch(RuntimeException e){
+                System.out.print("x");
+            }
         }
         System.out.println(" " + allAlbums.size()+ " albuns loaded (" + (System.currentTimeMillis() - startTime) + " ms)");
         return allAlbums;
+
     }
 
     public Album getAlbum(String albumName){
@@ -182,9 +192,17 @@ public class GooglePhotosAlbums {
     }
 
     private Set<String> retrieveFilesFromAlbum(Album album) {
-        InternalPhotosLibraryClient.SearchMediaItemsPagedResponse response = photosLibraryClient.searchMediaItems(album.getId());
-        return StreamSupport.stream(response.iterateAll().spliterator(), false)
-                .map(MediaItem::getFilename)
-                .collect(Collectors.toSet());
+        byte retry = 0;
+        while (retry++ < 100) {
+            try {
+                InternalPhotosLibraryClient.SearchMediaItemsPagedResponse response = photosLibraryClient.searchMediaItems(album.getId());
+                return StreamSupport.stream(response.iterateAll().spliterator(), false)
+                        .map(MediaItem::getFilename)
+                        .collect(Collectors.toSet());
+            } catch (RuntimeException e) {
+                System.out.println("Error: " + e.getMessage() + " retry " + retry);
+            }
+        }
+        throw new RuntimeException("Couldn't retrieve medias from album " + album.getTitle());
     }
 }
