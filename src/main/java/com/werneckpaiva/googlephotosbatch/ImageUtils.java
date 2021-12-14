@@ -39,7 +39,7 @@ public class ImageUtils {
             TiffImageMetadata metadata = readExifMetadata(imageData);
 
             // resize
-            image = Scalr.resize(image, maxDimension);
+            image = Scalr.resize(image, Scalr.Method.ULTRA_QUALITY, maxDimension);
             image.flush();
 
             // rewrite resized image as byte[]
