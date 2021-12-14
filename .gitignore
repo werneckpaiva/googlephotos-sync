@@ -1,3 +1,4 @@
 .gradle
 credentials.json
 credentials
+build/*
