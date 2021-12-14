@@ -30,7 +30,7 @@ public class PicasaBatch {
 
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
 
-    private static final Pattern ALLOWED_FILES_PATTERN = Pattern.compile("\\.(jpg|mp4|mov)$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ALLOWED_FILES_PATTERN = Pattern.compile("\\.(jpe?g|mp4|mov)$", Pattern.CASE_INSENSITIVE);
 
     private static final List<String> REQUIRED_SCOPES =
             ImmutableList.of(
@@ -72,6 +72,9 @@ public class PicasaBatch {
 
             for(String folderToProcess : foldersToProcess){
                 File folderFile = new File(folderToProcess);
+                if (!folderFile.exists()) {
+                    continue;
+                }
                 uploadFoldersRecursively(googlePhotosAlbums, baseFolder, folderFile);
             }
 

@@ -28,7 +28,7 @@ public class GooglePhotosAlbums {
 
     public static final int MAX_FREE_DIMENSION = 2048;
 
-    private static final Pattern JPEG_PATTERN = Pattern.compile("\\.jpg$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern JPEG_PATTERN = Pattern.compile("\\.jpe?g$", Pattern.CASE_INSENSITIVE);
     private static final Pattern VIDEO_PATTERN = Pattern.compile("\\.(mov|mp4)", Pattern.CASE_INSENSITIVE);
 
     private static class MediaWithName implements Comparable<MediaWithName>{
