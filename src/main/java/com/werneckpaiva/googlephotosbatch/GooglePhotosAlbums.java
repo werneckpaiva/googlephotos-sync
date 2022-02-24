@@ -29,7 +29,6 @@ public class GooglePhotosAlbums {
     public static final int MAX_FREE_DIMENSION = 2048;
 
     private static final Pattern JPEG_PATTERN = Pattern.compile("\\.jpe?g$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern VIDEO_PATTERN = Pattern.compile("\\.(mov|mp4)", Pattern.CASE_INSENSITIVE);
 
     private static class MediaWithName implements Comparable<MediaWithName>{
         public final String name;
@@ -106,66 +105,87 @@ public class GooglePhotosAlbums {
             System.out.println("Album: " + album.getTitle());
             final Set<String> albumFileNames = retrieveFilesFromAlbum(album);
 
-            List<MediaWithName> mediasToUpload = files.stream()
-                    .map(file -> new MediaWithName(AlbumUtils.file2MediaName(file), file))
-                    .filter(media -> !albumFileNames.contains(media.name))
-                    .sorted()
-                    .collect(Collectors.toList());
+            List<MediaWithName> mediasToUpload =this.getMediasToUpload(files, albumFileNames);
 
-            if (mediasToUpload.size() == 0) return;
+            if (mediasToUpload.isEmpty()) return;
 
             if (!album.getIsWriteable()){
                 System.out.println("ERROR: album is not writable");
                 return;
             }
 
-            if (!mediasToUpload.isEmpty()) {
-                System.out.println("Uploading " + mediasToUpload.size() + " medias to album: " + album.getTitle());
-                Iterator<MediaWithName> newMediasIterator = mediasToUpload.iterator();
-                while (newMediasIterator.hasNext()) {
-                    List<NewMediaItem> mediasUploaded = new ArrayList<>();
-                    while (mediasUploaded.size() < 10 && newMediasIterator.hasNext()){
-                        MediaWithName media = newMediasIterator.next();
-                        if (JPEG_PATTERN.matcher(media.file.getName()).find()){
-                            File resizedFile = ImageUtils.resizeJPGImage(media.file, MAX_FREE_DIMENSION);
-                            media = new MediaWithName(media.name, resizedFile);
-                        }
-                        NewMediaItem newMediaItem = uploadSingleFile(media.name, media.file);
-                        if (newMediaItem != null) {
-                            mediasUploaded.add(newMediaItem);
-                        }
+            System.out.println("Uploading " + mediasToUpload.size() + " medias to album: " + album.getTitle());
+            Iterator<MediaWithName> newMediasIterator = mediasToUpload.iterator();
+            double totalSizeMb = mediasToUpload.stream()
+                    .mapToDouble(mediaWithFile -> mediaWithFile.file.length() / 1024.0 / 1024.0).sum();
+            double processedSizeMb = 0;
+            while (newMediasIterator.hasNext()) {
+                List<NewMediaItem> mediasUploaded = new ArrayList<>();
+                long start = System.currentTimeMillis();
+                double batchSizeMb = 0;
+                while (mediasUploaded.size() < 10 && newMediasIterator.hasNext()){
+                    MediaWithName media = newMediasIterator.next();
+                    double fileSizeMb = media.file.length() / 1024.0 / 1024.0;
+                    if (JPEG_PATTERN.matcher(media.file.getName()).find()){
+                        File resizedFile = ImageUtils.resizeJPGImage(media.file, MAX_FREE_DIMENSION);
+                        media = new MediaWithName(media.name, resizedFile);
                     }
-                    if (mediasUploaded.size() == 0) continue;
-                    int retries = 0;
-                    while (retries++ < 3){
-                        try{
-                            BatchCreateMediaItemsRequest albumMediaItemsRequest = BatchCreateMediaItemsRequest.newBuilder()
-                                    .setAlbumId(album.getId())
-                                    .addAllNewMediaItems(mediasUploaded)
-                                    .build();
-                            ApiFuture<BatchCreateMediaItemsResponse> apiFuture = photosLibraryClient.batchCreateMediaItemsCallable()
-                                    .futureCall(albumMediaItemsRequest);
-                            BatchCreateMediaItemsResponse mediasToAlbumResponse = apiFuture.get();
-                            List<NewMediaItemResult> newMediaItemResultsList = mediasToAlbumResponse.getNewMediaItemResultsList();
-                            System.out.println(newMediaItemResultsList.size() + " items added to album: "+album.getTitle());
-                            for (NewMediaItemResult itemsResponse : newMediaItemResultsList) {
-                                Status status = itemsResponse.getStatus();
-                                if (status.getCode() != Code.OK_VALUE) {
-                                    System.out.println("Error setting item to album: " + status.getCode() + " - " + status.getMessage());
-                                }
-                            }
-                            break;
-                        } catch(ExecutionException e){
-                            e.printStackTrace();
-                            System.out.println("Retrying after 30s...");
-                            Thread.sleep(30000);
-                        }
+                    NewMediaItem newMediaItem = this.uploadSingleFile(media.name, media.file);
+                    batchSizeMb += fileSizeMb;
+                    processedSizeMb += fileSizeMb;
+                    if (newMediaItem != null) {
+                        mediasUploaded.add(newMediaItem);
                     }
                 }
+                if (mediasUploaded.size() == 0) continue;
+                saveToAlbum(album, mediasUploaded);
+                long elapsedTimeSec = (System.currentTimeMillis() - start) / 1000;
+                double remainingSizeMb = (totalSizeMb - processedSizeMb);
+                int remainingFiles = mediasToUpload.size() - mediasUploaded.size();
+                double etaMin = ((batchSizeMb / elapsedTimeSec) * remainingSizeMb) / 60.0;
+                System.out.println(String.format("%d files (%.1f MB) uploaded in %ds.",  mediasUploaded.size(), batchSizeMb, elapsedTimeSec));
+                System.out.println(String.format("Remaining %d files (%.1f MB) to upload. ETA: %.1f min", remainingFiles, remainingSizeMb, etaMin));
             }
         } catch(InterruptedException e){
             System.out.println("Error adding medias to album");
             e.printStackTrace();
+        }
+    }
+
+    private List<MediaWithName> getMediasToUpload(List<File> files, Set<String> albumFileNames) {
+        List<MediaWithName> mediasToUpload = files.stream()
+                .map(file -> new MediaWithName(AlbumUtils.file2MediaName(file), file))
+                .filter(media -> !albumFileNames.contains(media.name))
+                .sorted()
+                .collect(Collectors.toList());
+        return mediasToUpload;
+    }
+
+    private void saveToAlbum(Album album, List<NewMediaItem> mediasUploaded) throws InterruptedException {
+        int retries = 0;
+        while (retries++ < 3){
+            try{
+                BatchCreateMediaItemsRequest albumMediaItemsRequest = BatchCreateMediaItemsRequest.newBuilder()
+                        .setAlbumId(album.getId())
+                        .addAllNewMediaItems(mediasUploaded)
+                        .build();
+                ApiFuture<BatchCreateMediaItemsResponse> apiFuture = photosLibraryClient.batchCreateMediaItemsCallable()
+                        .futureCall(albumMediaItemsRequest);
+                BatchCreateMediaItemsResponse mediasToAlbumResponse = apiFuture.get();
+                List<NewMediaItemResult> newMediaItemResultsList = mediasToAlbumResponse.getNewMediaItemResultsList();
+                System.out.println(newMediaItemResultsList.size() + " items added to album: "+ album.getTitle());
+                for (NewMediaItemResult itemsResponse : newMediaItemResultsList) {
+                    Status status = itemsResponse.getStatus();
+                    if (status.getCode() != Code.OK_VALUE) {
+                        System.out.println("Error setting item to album: " + status.getCode() + " - " + status.getMessage());
+                    }
+                }
+                break;
+            } catch(ExecutionException e){
+                e.printStackTrace();
+                System.out.println("Retrying after 30s...");
+                Thread.sleep(30000);
+            }
         }
     }
 
