@@ -119,6 +119,7 @@ public class GooglePhotosAlbums {
             double totalSizeMb = mediasToUpload.stream()
                     .mapToDouble(mediaWithFile -> mediaWithFile.file.length() / 1024.0 / 1024.0).sum();
             double processedSizeMb = 0;
+            int remainingFiles = mediasToUpload.size();
             while (newMediasIterator.hasNext()) {
                 List<NewMediaItem> mediasUploaded = new ArrayList<>();
                 long start = System.currentTimeMillis();
@@ -141,10 +142,12 @@ public class GooglePhotosAlbums {
                 saveToAlbum(album, mediasUploaded);
                 long elapsedTimeSec = (System.currentTimeMillis() - start) / 1000;
                 double remainingSizeMb = (totalSizeMb - processedSizeMb);
-                int remainingFiles = mediasToUpload.size() - mediasUploaded.size();
+                remainingFiles -= mediasUploaded.size();
                 double etaMin = ((batchSizeMb / elapsedTimeSec) * remainingSizeMb) / 60.0;
-                System.out.println(String.format("%d files (%.1f MB) uploaded in %ds.",  mediasUploaded.size(), batchSizeMb, elapsedTimeSec));
-                System.out.println(String.format("Remaining %d files (%.1f MB) to upload. ETA: %.1f min", remainingFiles, remainingSizeMb, etaMin));
+                System.out.println(String.format("%d items (%.1f MB) uploaded in %ds to album: %s",  mediasUploaded.size(), batchSizeMb, elapsedTimeSec,  album.getTitle()));
+                if (remainingFiles > 0) {
+                    System.out.println(String.format("Remaining %d files (%.1f MB) to upload. ETA: %.1f min", remainingFiles, remainingSizeMb, etaMin));
+                }
             }
         } catch(InterruptedException e){
             System.out.println("Error adding medias to album");
@@ -173,7 +176,6 @@ public class GooglePhotosAlbums {
                         .futureCall(albumMediaItemsRequest);
                 BatchCreateMediaItemsResponse mediasToAlbumResponse = apiFuture.get();
                 List<NewMediaItemResult> newMediaItemResultsList = mediasToAlbumResponse.getNewMediaItemResultsList();
-                System.out.println(newMediaItemResultsList.size() + " items added to album: "+ album.getTitle());
                 for (NewMediaItemResult itemsResponse : newMediaItemResultsList) {
                     Status status = itemsResponse.getStatus();
                     if (status.getCode() != Code.OK_VALUE) {
