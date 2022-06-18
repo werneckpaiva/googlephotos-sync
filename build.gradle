@@ -16,30 +16,33 @@ jar {
     }
 
     from {
-        configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
 dependencies {
-    compile 'com.google.oauth-client:google-oauth-client-jetty:1.23.0'
-    compile 'com.google.oauth-client:google-oauth-client-java6:1.23.0'
-    compile 'com.google.auth:google-auth-library-oauth2-http:0.13.0'
-    compile 'com.google.photos.library:google-photos-library-client:1.1.0'
-    compile('com.google.api-client:google-api-client:1.23.0') {
+    implementation 'com.google.oauth-client:google-oauth-client-jetty:1.23.0'
+    implementation 'com.google.oauth-client:google-oauth-client-java6:1.23.0'
+    implementation 'com.google.auth:google-auth-library-oauth2-http:0.13.0'
+    implementation 'com.google.photos.library:google-photos-library-client:1.1.0'
+    implementation('com.google.api-client:google-api-client:1.23.0') {
         exclude group: 'com.google.guava', module: 'guava-jdk5'
     }
 
-    compile 'org.apache.commons:commons-imaging:1.0-SNAPSHOT'
-    compile 'commons-io:commons-io:2.6'
-    compile 'org.imgscalr:imgscalr-lib:4.2'
+    implementation 'org.apache.commons:commons-imaging:1.0-SNAPSHOT'
+    implementation 'commons-io:commons-io:2.6'
+    implementation 'org.imgscalr:imgscalr-lib:4.2'
 
-    compile 'com.google.api:gax:1.33.1',
+    implementation 'com.google.api:gax:1.33.1',
             'com.google.api:gax-grpc:1.33.1'
 
-    compile 'com.google.api.grpc:proto-google-common-protos:1.12.0'
+    implementation 'com.google.api.grpc:proto-google-common-protos:1.12.0'
 
-    compile 'io.grpc:grpc-netty:1.13.2'
-    compile 'io.netty:netty-tcnative-boringssl-static:2.0.8.Final'
+    implementation 'io.grpc:grpc-netty::1.13.2'
+    implementation 'io.netty:netty-tcnative-boringssl-static:2.0.8.Final'
+
+    runtimeOnly 'io.netty:netty-tcnative-boringssl-static:2.0.20.Final'
 
     testImplementation 'junit:junit:4.13'
 }
