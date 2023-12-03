@@ -30,14 +30,7 @@ public class GooglePhotosAlbums {
 
     private static final Pattern JPEG_PATTERN = Pattern.compile("\\.jpe?g$", Pattern.CASE_INSENSITIVE);
 
-    private static class MediaWithName implements Comparable<MediaWithName>{
-        public final String name;
-        public final File file;
-        public MediaWithName(String name, File file){
-            this.file = file;
-            this.name = name;
-        }
-
+    private record MediaWithName(String name, File file) implements Comparable<MediaWithName> {
         @Override
         public int compareTo(MediaWithName other) {
             return this.name.compareTo(other.name);
