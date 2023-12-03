@@ -5,6 +5,7 @@ plugins {
 group 'com.werneckpaiva'
 version '1.0-SNAPSHOT'
 
+
 repositories {
     mavenCentral()
     maven { url "https://repository.apache.org/content/repositories/snapshots/" }
@@ -30,7 +31,7 @@ dependencies {
         exclude group: 'com.google.guava', module: 'guava-jdk5'
     }
 
-    implementation 'org.apache.commons:commons-imaging:1.0-SNAPSHOT'
+    implementation 'org.apache.commons:commons-imaging:1.0-alpha3'
     implementation 'commons-io:commons-io:2.6'
     implementation 'org.imgscalr:imgscalr-lib:4.2'
 
@@ -39,10 +40,17 @@ dependencies {
 
     implementation 'com.google.api.grpc:proto-google-common-protos:1.12.0'
 
-    implementation 'io.grpc:grpc-netty::1.13.2'
+    implementation 'io.grpc:grpc-netty:1.13.2'
     implementation 'io.netty:netty-tcnative-boringssl-static:2.0.8.Final'
 
     runtimeOnly 'io.netty:netty-tcnative-boringssl-static:2.0.20.Final'
 
-    testImplementation 'junit:junit:4.13'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+
+}
+
+test {
+    useJUnitPlatform()
+    maxHeapSize = '1G'
 }

@@ -38,12 +38,13 @@ public class PicasaBatch {
                     "https://www.googleapis.com/auth/photoslibrary.appendonly");
 
     public static void main(String[] args){
-        String baseFolder = args[0];
-        if (baseFolder.length() < 1){
+
+        if (args.length == 0){
             System.out.println("Usage: <base_folder> [folders...]");
             System.exit(1);
         }
-        List<String> foldersToProcess = new ArrayList<String>();
+        String baseFolder = args[0];
+        List<String> foldersToProcess = new ArrayList<>();
         if (args.length >= 2){
             for (int i=1; i<args.length; i++){
                 String processFolder = args[i];
@@ -96,6 +97,7 @@ public class PicasaBatch {
     private static Credentials getUserCredentials() throws IOException, GeneralSecurityException {
         InputStream credentialsInputStream = PicasaBatch.class
                 .getClassLoader().getResourceAsStream("credentials.json");
+        assert credentialsInputStream != null;
         GoogleClientSecrets clientSecrets =
                 GoogleClientSecrets.load(JSON_FACTORY,
                         new InputStreamReader(credentialsInputStream));
@@ -121,10 +123,10 @@ public class PicasaBatch {
                 .build();
     }
 
-    private void uploadFoldersRecursively(GooglePhotosAlbums googlePhotosAlbums, String baseFolder, File path) throws Exception {
+    private void uploadFoldersRecursively(GooglePhotosAlbums googlePhotosAlbums, String baseFolder, File path) {
         List<File> files = new ArrayList<>();
         List<File> dirs = new ArrayList<>();
-        for (File file : path.listFiles()){
+        for (File file : Objects.requireNonNull(path.listFiles())){
             String fileName = file.getName();
             if (fileName.startsWith(".")) continue;
             if (file.isDirectory()){
