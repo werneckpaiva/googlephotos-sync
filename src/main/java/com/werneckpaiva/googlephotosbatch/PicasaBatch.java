@@ -16,11 +16,18 @@ import com.google.auth.oauth2.UserCredentials;
 import com.google.common.collect.ImmutableList;
 import com.google.photos.library.v1.PhotosLibraryClient;
 import com.google.photos.library.v1.PhotosLibrarySettings;
-import com.google.photos.library.v1.proto.Album;
+import com.werneckpaiva.googlephotosbatch.service.Album;
+import com.werneckpaiva.googlephotosbatch.service.GooglePhotosService;
+import com.werneckpaiva.googlephotosbatch.service.impl.GooglePhotosServiceV1LibraryImpl;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.security.GeneralSecurityException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 public class PicasaBatch {
@@ -69,7 +76,8 @@ public class PicasaBatch {
     public void run(String baseFolder, List<String> foldersToProcess) throws Exception {
         try (PhotosLibraryClient photosLibraryClient = createPhotosLibraryClient()) {
 
-            GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(photosLibraryClient);
+            GooglePhotosService googlePhotoService = new GooglePhotosServiceV1LibraryImpl(photosLibraryClient);
+            GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(googlePhotoService);
 
             for(String folderToProcess : foldersToProcess){
                 File folderFile = new File(folderToProcess);

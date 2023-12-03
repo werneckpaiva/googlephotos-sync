@@ -7,12 +7,14 @@ import com.google.photos.library.v1.PhotosLibraryClient;
 import static org.mockito.Mockito.*;
 
 import com.google.photos.library.v1.internal.InternalPhotosLibraryClient;
-import com.google.photos.library.v1.proto.Album;
 import com.google.photos.library.v1.proto.BatchCreateMediaItemsRequest;
 import com.google.photos.library.v1.proto.BatchCreateMediaItemsResponse;
 import com.google.photos.library.v1.proto.ListAlbumsRequest;
 import com.google.photos.library.v1.upload.UploadMediaItemRequest;
 import com.google.photos.library.v1.upload.UploadMediaItemResponse;
+import com.werneckpaiva.googlephotosbatch.service.Album;
+import com.werneckpaiva.googlephotosbatch.service.GooglePhotosService;
+import com.werneckpaiva.googlephotosbatch.service.impl.GooglePhotosServiceV1LibraryImpl;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -35,9 +37,10 @@ public class TestGooglePhotosAlbums {
         InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = mock(InternalPhotosLibraryClient.ListAlbumsPagedResponse.class);
         PhotosLibraryClient photosLibraryClient = mock(PhotosLibraryClient.class);
         when(photosLibraryClient.listAlbums(any(ListAlbumsRequest.class))).thenReturn(listAlbumsResponse);
+        GooglePhotosService googlePhotoService = new GooglePhotosServiceV1LibraryImpl(photosLibraryClient);
 
         // Execute
-        GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(photosLibraryClient);
+        GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(googlePhotoService);
         Map<String, Album> albumMap = googlePhotosAlbums.listAllAlbuns();
         Assertions.assertTrue(albumMap.isEmpty());
     }
@@ -46,7 +49,10 @@ public class TestGooglePhotosAlbums {
     public void testListAlbumsNonEmpty() {
         // Setup
         InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = mock(InternalPhotosLibraryClient.ListAlbumsPagedResponse.class);
-        List<Album> albums = Arrays.asList(mock(Album.class), mock(Album.class), mock(Album.class));
+        List<com.google.photos.library.v1.proto.Album> albums = Arrays.asList(
+                mock(com.google.photos.library.v1.proto.Album.class),
+                mock(com.google.photos.library.v1.proto.Album.class),
+                mock(com.google.photos.library.v1.proto.Album.class));
         when(albums.get(0).getTitle()).thenReturn("Album 1");
         when(albums.get(1).getTitle()).thenReturn("Album 2");
         when(albums.get(2).getTitle()).thenReturn("Album 3");
@@ -54,9 +60,10 @@ public class TestGooglePhotosAlbums {
 
         PhotosLibraryClient photosLibraryClient = mock(PhotosLibraryClient.class);
         when(photosLibraryClient.listAlbums(any(ListAlbumsRequest.class))).thenReturn(listAlbumsResponse);
+        GooglePhotosService googlePhotoService = new GooglePhotosServiceV1LibraryImpl(photosLibraryClient);
 
         // Execute
-        GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(photosLibraryClient);
+        GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(googlePhotoService);
         Map<String, Album> albumMap = googlePhotosAlbums.listAllAlbuns();
         Assertions.assertEquals(3, albumMap.size());
     }
@@ -79,12 +86,9 @@ public class TestGooglePhotosAlbums {
         when(photosLibraryClient.searchMediaItems(albumId)).thenReturn(responseEmptyAlbum);
         when(photosLibraryClient.uploadMediaItem(any(UploadMediaItemRequest.class))).thenReturn(uploadResponse);
         when(photosLibraryClient.batchCreateMediaItemsCallable()).thenReturn(mediaCallable);
+        GooglePhotosService googlePhotoService = new GooglePhotosServiceV1LibraryImpl(photosLibraryClient);
 
-        Album album = mock(Album.class);
-        when(album.getId()).thenReturn(albumId);
-        when(album.getTitle()).thenReturn("My Album");
-        when(album.getIsWriteable()).thenReturn(true);
-
+        Album album = new Album("My Album", albumId, true);
 
         String imageName = "photo_portrait_small.JPG";
         URL resourceURL = getClass().getClassLoader().getResource(imageName);
@@ -93,7 +97,7 @@ public class TestGooglePhotosAlbums {
         List<File> files = Arrays.asList(imageFile);
 
         // Execute
-        GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(photosLibraryClient);
+        GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(googlePhotoService);
         googlePhotosAlbums.batchUploadFiles(album, files);
     }
 }
