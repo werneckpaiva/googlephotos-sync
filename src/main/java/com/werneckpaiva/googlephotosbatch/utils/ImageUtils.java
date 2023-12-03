@@ -1,4 +1,4 @@
-package com.werneckpaiva.googlephotosbatch;
+package com.werneckpaiva.googlephotosbatch.utils;
 
 import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.ImageWriteException;

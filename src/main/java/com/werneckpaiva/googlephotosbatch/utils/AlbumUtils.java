@@ -1,4 +1,4 @@
-package com.werneckpaiva.googlephotosbatch;
+package com.werneckpaiva.googlephotosbatch.utils;
 
 import java.io.File;
 

@@ -13,8 +13,8 @@ import com.google.photos.library.v1.proto.ListAlbumsRequest;
 import com.google.photos.library.v1.upload.UploadMediaItemRequest;
 import com.google.photos.library.v1.upload.UploadMediaItemResponse;
 import com.werneckpaiva.googlephotosbatch.service.Album;
-import com.werneckpaiva.googlephotosbatch.service.GooglePhotosService;
-import com.werneckpaiva.googlephotosbatch.service.impl.GooglePhotosServiceV1LibraryImpl;
+import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
+import com.werneckpaiva.googlephotosbatch.service.impl.GooglePhotosAPIV1LibraryImpl;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -29,7 +29,7 @@ import java.util.concurrent.ExecutionException;
 import com.google.api.gax.rpc.UnaryCallable;
 
 
-public class TestGooglePhotosAlbums {
+public class TestGooglePhotoAlbumManager {
 
     @Test
     public void testListAlbumsEmptyList() {
@@ -37,11 +37,11 @@ public class TestGooglePhotosAlbums {
         InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = mock(InternalPhotosLibraryClient.ListAlbumsPagedResponse.class);
         PhotosLibraryClient photosLibraryClient = mock(PhotosLibraryClient.class);
         when(photosLibraryClient.listAlbums(any(ListAlbumsRequest.class))).thenReturn(listAlbumsResponse);
-        GooglePhotosService googlePhotoService = new GooglePhotosServiceV1LibraryImpl(photosLibraryClient);
+        GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(photosLibraryClient);
 
         // Execute
-        GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(googlePhotoService);
-        Map<String, Album> albumMap = googlePhotosAlbums.listAllAlbuns();
+        GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
+        Map<String, Album> albumMap = googlePhotoAlbumManager.listAllAlbuns();
         Assertions.assertTrue(albumMap.isEmpty());
     }
 
@@ -60,11 +60,11 @@ public class TestGooglePhotosAlbums {
 
         PhotosLibraryClient photosLibraryClient = mock(PhotosLibraryClient.class);
         when(photosLibraryClient.listAlbums(any(ListAlbumsRequest.class))).thenReturn(listAlbumsResponse);
-        GooglePhotosService googlePhotoService = new GooglePhotosServiceV1LibraryImpl(photosLibraryClient);
+        GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(photosLibraryClient);
 
         // Execute
-        GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(googlePhotoService);
-        Map<String, Album> albumMap = googlePhotosAlbums.listAllAlbuns();
+        GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
+        Map<String, Album> albumMap = googlePhotoAlbumManager.listAllAlbuns();
         Assertions.assertEquals(3, albumMap.size());
     }
 
@@ -86,7 +86,7 @@ public class TestGooglePhotosAlbums {
         when(photosLibraryClient.searchMediaItems(albumId)).thenReturn(responseEmptyAlbum);
         when(photosLibraryClient.uploadMediaItem(any(UploadMediaItemRequest.class))).thenReturn(uploadResponse);
         when(photosLibraryClient.batchCreateMediaItemsCallable()).thenReturn(mediaCallable);
-        GooglePhotosService googlePhotoService = new GooglePhotosServiceV1LibraryImpl(photosLibraryClient);
+        GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(photosLibraryClient);
 
         Album album = new Album("My Album", albumId, true);
 
@@ -97,7 +97,7 @@ public class TestGooglePhotosAlbums {
         List<File> files = Arrays.asList(imageFile);
 
         // Execute
-        GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(googlePhotoService);
-        googlePhotosAlbums.batchUploadFiles(album, files);
+        GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
+        googlePhotoAlbumManager.batchUploadFiles(album, files);
     }
 }

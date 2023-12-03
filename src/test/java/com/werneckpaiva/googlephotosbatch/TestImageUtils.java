@@ -1,5 +1,6 @@
 package com.werneckpaiva.googlephotosbatch;
 
+import com.werneckpaiva.googlephotosbatch.utils.ImageUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

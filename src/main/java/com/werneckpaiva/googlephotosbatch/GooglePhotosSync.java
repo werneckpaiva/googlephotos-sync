@@ -17,8 +17,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.photos.library.v1.PhotosLibraryClient;
 import com.google.photos.library.v1.PhotosLibrarySettings;
 import com.werneckpaiva.googlephotosbatch.service.Album;
-import com.werneckpaiva.googlephotosbatch.service.GooglePhotosService;
-import com.werneckpaiva.googlephotosbatch.service.impl.GooglePhotosServiceV1LibraryImpl;
+import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
+import com.werneckpaiva.googlephotosbatch.service.impl.GooglePhotosAPIV1LibraryImpl;
+import com.werneckpaiva.googlephotosbatch.utils.AlbumUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -30,7 +31,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
-public class PicasaBatch {
+public class GooglePhotosSync {
 
 
     private static final File CREDENTIALS_DATA_FILE = new File( "credentials");
@@ -65,9 +66,9 @@ public class PicasaBatch {
             foldersToProcess.add(baseFolder);
         }
 
-        PicasaBatch picasaBatch = new PicasaBatch();
+        GooglePhotosSync googlePhotosSync = new GooglePhotosSync();
         try {
-            picasaBatch.run(baseFolder, foldersToProcess);
+            googlePhotosSync.run(baseFolder, foldersToProcess);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -76,8 +77,8 @@ public class PicasaBatch {
     public void run(String baseFolder, List<String> foldersToProcess) throws Exception {
         try (PhotosLibraryClient photosLibraryClient = createPhotosLibraryClient()) {
 
-            GooglePhotosService googlePhotoService = new GooglePhotosServiceV1LibraryImpl(photosLibraryClient);
-            GooglePhotosAlbums googlePhotosAlbums = new GooglePhotosAlbums(googlePhotoService);
+            GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(photosLibraryClient);
+            GooglePhotoAlbumManager googlePhotosAlbums = new GooglePhotoAlbumManager(googlePhotoService);
 
             for(String folderToProcess : foldersToProcess){
                 File folderFile = new File(folderToProcess);
@@ -103,7 +104,7 @@ public class PicasaBatch {
     }
 
     private static Credentials getUserCredentials() throws IOException, GeneralSecurityException {
-        InputStream credentialsInputStream = PicasaBatch.class
+        InputStream credentialsInputStream = GooglePhotosSync.class
                 .getClassLoader().getResourceAsStream("credentials.json");
         assert credentialsInputStream != null;
         GoogleClientSecrets clientSecrets =
@@ -131,7 +132,7 @@ public class PicasaBatch {
                 .build();
     }
 
-    private void uploadFoldersRecursively(GooglePhotosAlbums googlePhotosAlbums, String baseFolder, File path) {
+    private void uploadFoldersRecursively(GooglePhotoAlbumManager googlePhotosAlbums, String baseFolder, File path) {
         List<File> files = new ArrayList<>();
         List<File> dirs = new ArrayList<>();
         for (File file : Objects.requireNonNull(path.listFiles())){

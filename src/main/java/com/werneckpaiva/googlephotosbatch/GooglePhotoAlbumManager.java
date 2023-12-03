@@ -1,7 +1,9 @@
 package com.werneckpaiva.googlephotosbatch;
 
 import com.werneckpaiva.googlephotosbatch.service.Album;
-import com.werneckpaiva.googlephotosbatch.service.GooglePhotosService;
+import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
+import com.werneckpaiva.googlephotosbatch.utils.AlbumUtils;
+import com.werneckpaiva.googlephotosbatch.utils.ImageUtils;
 
 import java.io.File;
 import java.util.*;
@@ -9,10 +11,9 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 
-public class GooglePhotosAlbums {
+public class GooglePhotoAlbumManager {
 
-
-    private final GooglePhotosService googlePhotosService;
+    private final GooglePhotosAPI googlePhotosAPI;
 
     private Map<String, Album> albums = null;
 
@@ -27,8 +28,8 @@ public class GooglePhotosAlbums {
         }
     }
 
-    public GooglePhotosAlbums(GooglePhotosService googlePhotosService) {
-        this.googlePhotosService = googlePhotosService;
+    public GooglePhotoAlbumManager(GooglePhotosAPI googlePhotosAPI) {
+        this.googlePhotosAPI = googlePhotosAPI;
     }
 
     public Map<String, Album> listAllAlbuns() {
@@ -40,7 +41,7 @@ public class GooglePhotosAlbums {
         while (retry++ < 100) {
             try {
                 int i = 1;
-                for (Album album : googlePhotosService.getAllAlbums()) {
+                for (Album album : googlePhotosAPI.getAllAlbums()) {
                     if (i++ % 100 == 0) {
                         System.out.print(".");
                     }
@@ -65,14 +66,14 @@ public class GooglePhotosAlbums {
 
     public Album createAlbum(String albumName) {
         System.out.println("Creating album " + albumName);
-        Album album = googlePhotosService.createAlbum(albumName);
+        Album album = googlePhotosAPI.createAlbum(albumName);
         this.albums.put(albumName, album);
         return album;
     }
 
     public void batchUploadFiles(Album album, List<File> files) {
         System.out.println("Album: " + album.title());
-        final Set<String> albumFileNames = googlePhotosService.retrieveFilesFromAlbum(album);
+        final Set<String> albumFileNames = googlePhotosAPI.retrieveFilesFromAlbum(album);
 
         List<MediaWithName> mediasToUpload = this.getMediasToUpload(files, albumFileNames);
 
@@ -100,7 +101,7 @@ public class GooglePhotosAlbums {
                     File resizedFile = ImageUtils.resizeJPGImage(media.file, MAX_FREE_DIMENSION);
                     media = new MediaWithName(media.name, resizedFile);
                 }
-                String newMediaToken = googlePhotosService.uploadSingleFile(media.name, media.file);
+                String newMediaToken = googlePhotosAPI.uploadSingleFile(media.name, media.file);
                 batchSizeMb += fileSizeMb;
                 processedSizeMb += fileSizeMb;
                 if (newMediaToken != null) {
@@ -108,7 +109,7 @@ public class GooglePhotosAlbums {
                 }
             }
             if (uploadedTokens.size() == 0) continue;
-            googlePhotosService.saveToAlbum(album, uploadedTokens);
+            googlePhotosAPI.saveToAlbum(album, uploadedTokens);
             long elapsedTimeSec = (System.currentTimeMillis() - start) / 1000;
             double remainingSizeMb = (totalSizeMb - processedSizeMb);
             remainingFiles -= uploadedTokens.size();

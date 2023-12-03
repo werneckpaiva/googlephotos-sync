@@ -12,7 +12,7 @@ import com.google.photos.library.v1.util.NewMediaItemFactory;
 import com.google.rpc.Code;
 import com.google.rpc.Status;
 import com.werneckpaiva.googlephotosbatch.service.Album;
-import com.werneckpaiva.googlephotosbatch.service.GooglePhotosService;
+import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
 
 import java.io.File;
 import java.io.IOException;
@@ -24,11 +24,11 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-public class GooglePhotosServiceV1LibraryImpl implements GooglePhotosService {
+public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
 
     private final PhotosLibraryClient photosLibraryClient;
 
-    public GooglePhotosServiceV1LibraryImpl(PhotosLibraryClient photosLibraryClient) {
+    public GooglePhotosAPIV1LibraryImpl(PhotosLibraryClient photosLibraryClient) {
         this.photosLibraryClient = photosLibraryClient;
     }
 

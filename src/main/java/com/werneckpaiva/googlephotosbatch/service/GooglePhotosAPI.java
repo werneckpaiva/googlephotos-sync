@@ -4,7 +4,7 @@ import java.io.File;
 import java.util.List;
 import java.util.Set;
 
-public interface GooglePhotosService {
+public interface GooglePhotosAPI {
     Set<String> retrieveFilesFromAlbum(Album album);
 
     String uploadSingleFile(String name, File file);
