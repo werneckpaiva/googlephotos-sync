@@ -1,22 +1,36 @@
 package com.werneckpaiva.googlephotosbatch.service.impl;
 
+import com.google.api.client.auth.oauth2.Credential;
+import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
+import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
+import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
+import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.json.JsonFactory;
+import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.core.ApiFuture;
+import com.google.api.gax.core.FixedCredentialsProvider;
 import com.google.api.gax.rpc.ApiException;
+import com.google.auth.Credentials;
+import com.google.auth.oauth2.UserCredentials;
+import com.google.common.collect.ImmutableList;
 import com.google.photos.library.v1.PhotosLibraryClient;
+import com.google.photos.library.v1.PhotosLibrarySettings;
 import com.google.photos.library.v1.internal.InternalPhotosLibraryClient;
 import com.google.photos.library.v1.proto.*;
-
 import com.google.photos.library.v1.upload.UploadMediaItemRequest;
 import com.google.photos.library.v1.upload.UploadMediaItemResponse;
 import com.google.photos.library.v1.util.NewMediaItemFactory;
 import com.google.rpc.Code;
 import com.google.rpc.Status;
+import com.werneckpaiva.googlephotosbatch.GooglePhotosSync;
 import com.werneckpaiva.googlephotosbatch.service.Album;
 import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
+import java.net.URL;
+import java.security.GeneralSecurityException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -28,10 +42,62 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
 
     private final PhotosLibraryClient photosLibraryClient;
 
+    private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
+
+    private static final File CREDENTIALS_DATA_FILE = new File( "credentials");
+
+    private static final List<String> REQUIRED_SCOPES =
+            ImmutableList.of(
+                    "https://www.googleapis.com/auth/photoslibrary.readonly",
+                    "https://www.googleapis.com/auth/photoslibrary.appendonly");
+
+
+
     public GooglePhotosAPIV1LibraryImpl(PhotosLibraryClient photosLibraryClient) {
         this.photosLibraryClient = photosLibraryClient;
     }
 
+    public GooglePhotosAPIV1LibraryImpl(URL credentialsURL) throws GeneralSecurityException, IOException {
+        this.photosLibraryClient = GooglePhotosAPIV1LibraryImpl.createPhotosLibraryClient(credentialsURL);
+    }
+
+    private static PhotosLibraryClient createPhotosLibraryClient(URL credentialsURL) throws GeneralSecurityException, IOException {
+        Credentials credentials = getUserCredentials(credentialsURL);
+        PhotosLibrarySettings settings = PhotosLibrarySettings
+                .newBuilder()
+                .setCredentialsProvider(
+                        FixedCredentialsProvider.create(credentials))
+                .build();
+        return PhotosLibraryClient.initialize(settings);
+    }
+
+    private static Credentials getUserCredentials(URL credentialsURL) throws IOException, GeneralSecurityException {
+        InputStream credentialsInputStream = credentialsURL.openStream();
+        assert credentialsInputStream != null;
+        GoogleClientSecrets clientSecrets =
+                GoogleClientSecrets.load(JSON_FACTORY,
+                        new InputStreamReader(credentialsInputStream));
+        String clientId = clientSecrets.getDetails().getClientId();
+        String clientSecret = clientSecrets.getDetails().getClientSecret();
+
+        GoogleAuthorizationCodeFlow flow =
+                new GoogleAuthorizationCodeFlow.Builder(
+                        GoogleNetHttpTransport.newTrustedTransport(),
+                        JSON_FACTORY,
+                        clientSecrets,
+                        REQUIRED_SCOPES)
+                        .setDataStoreFactory(new FileDataStoreFactory(CREDENTIALS_DATA_FILE))
+                        .setAccessType("offline")
+                        .build();
+        LocalServerReceiver receiver =
+                new LocalServerReceiver.Builder().build();
+        Credential credential = new AuthorizationCodeInstalledApp(flow, receiver).authorize("user");
+        return UserCredentials.newBuilder()
+                .setClientId(clientId)
+                .setClientSecret(clientSecret)
+                .setRefreshToken(credential.getRefreshToken())
+                .build();
+    }
     public Set<String> retrieveFilesFromAlbum(Album album) {
         byte retry = 0;
         while (retry++ < 100) {

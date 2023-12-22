@@ -7,7 +7,6 @@ import com.werneckpaiva.googlephotosbatch.utils.ImageUtils;
 
 import java.io.File;
 import java.util.*;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 
@@ -18,8 +17,6 @@ public class GooglePhotoAlbumManager {
     private Map<String, Album> albums = null;
 
     public static final int MAX_FREE_DIMENSION = 2048;
-
-    private static final Pattern JPEG_PATTERN = Pattern.compile("\\.jpe?g$", Pattern.CASE_INSENSITIVE);
 
     private record MediaWithName(String name, File file) implements Comparable<MediaWithName> {
         @Override
@@ -32,7 +29,7 @@ public class GooglePhotoAlbumManager {
         this.googlePhotosAPI = googlePhotosAPI;
     }
 
-    public Map<String, Album> listAllAlbuns() {
+    public Map<String, Album> listAllAlbums() {
         System.out.print("Loading albums ");
 
         long startTime = System.currentTimeMillis();
@@ -52,14 +49,14 @@ public class GooglePhotoAlbumManager {
                 System.out.print("x");
             }
         }
-        System.out.println(" " + allAlbums.size() + " albuns loaded (" + (System.currentTimeMillis() - startTime) + " ms)");
+        System.out.println(" " + allAlbums.size() + " albums loaded (" + (System.currentTimeMillis() - startTime) + " ms)");
         return allAlbums;
 
     }
 
     public Album getAlbum(String albumName) {
         if (this.albums == null) {
-            this.albums = listAllAlbuns();
+            this.albums = listAllAlbums();
         }
         return this.albums.get(albumName);
     }
@@ -97,7 +94,7 @@ public class GooglePhotoAlbumManager {
             while (uploadedTokens.size() < 10 && newMediasIterator.hasNext()) {
                 MediaWithName media = newMediasIterator.next();
                 double fileSizeMb = media.file.length() / 1024.0 / 1024.0;
-                if (JPEG_PATTERN.matcher(media.file.getName()).find()) {
+                if (ImageUtils.isJPEG(media.file)) {
                     File resizedFile = ImageUtils.resizeJPGImage(media.file, MAX_FREE_DIMENSION);
                     media = new MediaWithName(media.name, resizedFile);
                 }

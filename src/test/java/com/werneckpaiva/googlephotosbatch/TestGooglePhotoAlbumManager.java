@@ -41,7 +41,7 @@ public class TestGooglePhotoAlbumManager {
 
         // Execute
         GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
-        Map<String, Album> albumMap = googlePhotoAlbumManager.listAllAlbuns();
+        Map<String, Album> albumMap = googlePhotoAlbumManager.listAllAlbums();
         Assertions.assertTrue(albumMap.isEmpty());
     }
 
@@ -64,7 +64,7 @@ public class TestGooglePhotoAlbumManager {
 
         // Execute
         GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
-        Map<String, Album> albumMap = googlePhotoAlbumManager.listAllAlbuns();
+        Map<String, Album> albumMap = googlePhotoAlbumManager.listAllAlbums();
         Assertions.assertEquals(3, albumMap.size());
     }
 
@@ -99,5 +99,8 @@ public class TestGooglePhotoAlbumManager {
         // Execute
         GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
         googlePhotoAlbumManager.batchUploadFiles(album, files);
+
+
     }
+
 }

@@ -4,3 +4,4 @@ credentials
 build/*
 gradle/
 gradlew
+out/

@@ -1,5 +1,6 @@
 package com.werneckpaiva.googlephotosbatch.utils;
 
+import com.werneckpaiva.googlephotosbatch.GooglePhotoAlbumManager;
 import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.ImageWriteException;
 import org.apache.commons.imaging.Imaging;
@@ -13,8 +14,11 @@ import org.imgscalr.Scalr;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.*;
+import java.util.regex.Pattern;
 
 public class ImageUtils {
+
+    private static final Pattern JPEG_PATTERN = Pattern.compile("\\.jpe?g$", Pattern.CASE_INSENSITIVE);
 
     public static File resizeJPGImage(File inputFile, int maxDimension) {
         try{
@@ -89,4 +93,7 @@ public class ImageUtils {
         return jpegOut.toByteArray();
     }
 
+    public static boolean isJPEG(File mediaFile) {
+        return ImageUtils.JPEG_PATTERN.matcher(mediaFile.getName()).find();
+    }
 }
