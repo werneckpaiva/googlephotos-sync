@@ -2,6 +2,7 @@ package com.werneckpaiva.googlephotosbatch;
 
 import com.werneckpaiva.googlephotosbatch.service.Album;
 import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
+import com.werneckpaiva.googlephotosbatch.service.GooglePhotosServiceException;
 import com.werneckpaiva.googlephotosbatch.service.impl.GooglePhotosAPIV1LibraryImpl;
 import com.werneckpaiva.googlephotosbatch.utils.AlbumUtils;
 
@@ -46,7 +47,7 @@ public class GooglePhotosSync {
         }
     }
 
-    public void run(String baseFolder, List<String> foldersToProcess) throws Exception {
+    public void run(String baseFolder, List<String> foldersToProcess) throws GooglePhotosServiceException {
         URL credentialsURL = getClass().getClassLoader().getResource(CREDENTIALS_JSON);
         GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(credentialsURL);
         GooglePhotoAlbumManager googlePhotosAlbums = new GooglePhotoAlbumManager(googlePhotoService);

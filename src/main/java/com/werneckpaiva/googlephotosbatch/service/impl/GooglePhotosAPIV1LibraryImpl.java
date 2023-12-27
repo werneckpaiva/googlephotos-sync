@@ -7,7 +7,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.json.JsonFactory;
-import com.google.api.client.json.jackson2.JacksonFactory;
+
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.core.ApiFuture;
 import com.google.api.gax.core.FixedCredentialsProvider;
@@ -22,11 +22,12 @@ import com.google.photos.library.v1.proto.*;
 import com.google.photos.library.v1.upload.UploadMediaItemRequest;
 import com.google.photos.library.v1.upload.UploadMediaItemResponse;
 import com.google.photos.library.v1.util.NewMediaItemFactory;
+import com.google.photos.types.proto.MediaItem;
 import com.google.rpc.Code;
 import com.google.rpc.Status;
-import com.werneckpaiva.googlephotosbatch.GooglePhotosSync;
 import com.werneckpaiva.googlephotosbatch.service.Album;
 import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
+import com.werneckpaiva.googlephotosbatch.service.GooglePhotosServiceException;
 
 import java.io.*;
 import java.net.URL;
@@ -37,12 +38,13 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+import com.google.api.client.json.gson.GsonFactory;
 
 public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
 
     private final PhotosLibraryClient photosLibraryClient;
 
-    private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
+    private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
 
     private static final File CREDENTIALS_DATA_FILE = new File( "credentials");
 
@@ -57,18 +59,27 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
         this.photosLibraryClient = photosLibraryClient;
     }
 
-    public GooglePhotosAPIV1LibraryImpl(URL credentialsURL) throws GeneralSecurityException, IOException {
+    public GooglePhotosAPIV1LibraryImpl(URL credentialsURL) throws GooglePhotosServiceException {
         this.photosLibraryClient = GooglePhotosAPIV1LibraryImpl.createPhotosLibraryClient(credentialsURL);
     }
 
-    private static PhotosLibraryClient createPhotosLibraryClient(URL credentialsURL) throws GeneralSecurityException, IOException {
-        Credentials credentials = getUserCredentials(credentialsURL);
-        PhotosLibrarySettings settings = PhotosLibrarySettings
-                .newBuilder()
-                .setCredentialsProvider(
-                        FixedCredentialsProvider.create(credentials))
-                .build();
-        return PhotosLibraryClient.initialize(settings);
+    private static PhotosLibraryClient createPhotosLibraryClient(URL credentialsURL) throws GooglePhotosServiceException {
+        PhotosLibrarySettings settings = null;
+        try {
+            Credentials credentials = GooglePhotosAPIV1LibraryImpl.getUserCredentials(credentialsURL);
+            settings = PhotosLibrarySettings
+                    .newBuilder()
+                    .setCredentialsProvider(
+                            FixedCredentialsProvider.create(credentials))
+                    .build();
+        } catch (IOException | GeneralSecurityException e) {
+            throw new GooglePhotosServiceException("Can't create Google Photos credential", e);
+        }
+        try {
+            return PhotosLibraryClient.initialize(settings);
+        } catch (IOException e) {
+            throw new GooglePhotosServiceException("Can't initialize Google Photos library", e);
+        }
     }
 
     private static Credentials getUserCredentials(URL credentialsURL) throws IOException, GeneralSecurityException {
@@ -136,7 +147,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
     }
 
     public Album createAlbum(String albumName) {
-        com.google.photos.library.v1.proto.Album googleAlbum = photosLibraryClient.createAlbum(albumName)
+        com.google.photos.types.proto.Album googleAlbum = photosLibraryClient.createAlbum(albumName)
                     .toBuilder().setIsWriteable(true).build();
             return googleAlbum2Album(googleAlbum);
     }
@@ -180,12 +191,12 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                 .setPageSize(50)
                 .build();
         InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = photosLibraryClient.listAlbums(listAlbumsRequest);
-        Iterable<com.google.photos.library.v1.proto.Album> albumsIterable = listAlbumsResponse.iterateAll();
+        Iterable<com.google.photos.types.proto.Album> albumsIterable = listAlbumsResponse.iterateAll();
         return new Iterable<Album>() {
 
             @Override
             public Iterator<Album> iterator() {
-                Iterator<com.google.photos.library.v1.proto.Album> iterator = albumsIterable.iterator();
+                Iterator<com.google.photos.types.proto.Album> iterator = albumsIterable.iterator();
 
                 return new Iterator<Album>(){
 
@@ -196,7 +207,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
 
                     @Override
                     public Album next() {
-                        com.google.photos.library.v1.proto.Album googleAlbum = iterator.next();
+                        com.google.photos.types.proto.Album googleAlbum = iterator.next();
                         return googleAlbum2Album(googleAlbum);
                     }
                 };
@@ -204,7 +215,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
         };
     }
 
-    public static Album googleAlbum2Album(com.google.photos.library.v1.proto.Album googleAlbum){
+    public static Album googleAlbum2Album(com.google.photos.types.proto.Album googleAlbum){
         Album album = new Album(googleAlbum.getTitle(), googleAlbum.getId(), googleAlbum.getIsWriteable());
         return album;
     }

@@ -7,6 +7,7 @@ import com.werneckpaiva.googlephotosbatch.utils.ImageUtils;
 
 import java.io.File;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 
@@ -34,21 +35,21 @@ public class GooglePhotoAlbumManager {
 
         long startTime = System.currentTimeMillis();
         Map<String, Album> allAlbums = new HashMap<>();
-        byte retry = 0;
-        while (retry++ < 100) {
-            try {
-                int i = 1;
-                for (Album album : googlePhotosAPI.getAllAlbums()) {
-                    if (i++ % 100 == 0) {
-                        System.out.print(".");
-                    }
-                    allAlbums.put(album.title(), album);
-                }
-                break;
-            } catch (RuntimeException e) {
-                System.out.print("x");
-            }
-        }
+//        byte retry = 0;
+//        while (retry++ < 100) {
+//            try {
+//                int i = 1;
+//                for (Album album : googlePhotosAPI.getAllAlbums()) {
+//                    if (i++ % 100 == 0) {
+//                        System.out.print(".");
+//                    }
+//                    allAlbums.put(album.title(), album);
+//                }
+//                break;
+//            } catch (RuntimeException e) {
+//                System.out.print("x");
+//            }
+//        }
         System.out.println(" " + allAlbums.size() + " albums loaded (" + (System.currentTimeMillis() - startTime) + " ms)");
         return allAlbums;
 
@@ -82,11 +83,14 @@ public class GooglePhotoAlbumManager {
         }
 
         System.out.println("Uploading " + mediasToUpload.size() + " medias to album: " + album.title());
-        Iterator<MediaWithName> newMediasIterator = mediasToUpload.iterator();
-        double totalSizeMb = mediasToUpload.stream()
+
+        List<MediaWithName> resizedMediasToUpload = resizeMediasToUpload(mediasToUpload);
+
+        double totalSizeMb = resizedMediasToUpload.stream()
                 .mapToDouble(mediaWithFile -> mediaWithFile.file.length() / 1024.0 / 1024.0).sum();
         double processedSizeMb = 0;
-        int remainingFiles = mediasToUpload.size();
+        int remainingFiles = resizedMediasToUpload.size();
+        Iterator<MediaWithName> newMediasIterator = resizedMediasToUpload.iterator();
         while (newMediasIterator.hasNext()) {
             List<String> uploadedTokens = new ArrayList<>();
             long start = System.currentTimeMillis();
@@ -94,10 +98,6 @@ public class GooglePhotoAlbumManager {
             while (uploadedTokens.size() < 10 && newMediasIterator.hasNext()) {
                 MediaWithName media = newMediasIterator.next();
                 double fileSizeMb = media.file.length() / 1024.0 / 1024.0;
-                if (ImageUtils.isJPEG(media.file)) {
-                    File resizedFile = ImageUtils.resizeJPGImage(media.file, MAX_FREE_DIMENSION);
-                    media = new MediaWithName(media.name, resizedFile);
-                }
                 String newMediaToken = googlePhotosAPI.uploadSingleFile(media.name, media.file);
                 batchSizeMb += fileSizeMb;
                 processedSizeMb += fileSizeMb;
@@ -105,26 +105,80 @@ public class GooglePhotoAlbumManager {
                     uploadedTokens.add(newMediaToken);
                 }
             }
-            if (uploadedTokens.size() == 0) continue;
+            if (uploadedTokens.isEmpty()) continue;
             googlePhotosAPI.saveToAlbum(album, uploadedTokens);
             long elapsedTimeSec = (System.currentTimeMillis() - start) / 1000;
             double remainingSizeMb = (totalSizeMb - processedSizeMb);
             remainingFiles -= uploadedTokens.size();
             double etaMin = ((batchSizeMb / elapsedTimeSec) * remainingSizeMb) / 60.0;
-            System.out.println(String.format("%d items (%.1f MB) uploaded in %ds to album: %s", uploadedTokens.size(), batchSizeMb, elapsedTimeSec, album.title()));
+            System.out.printf("%d items (%.1f MB) uploaded in %ds to album: %s%n", uploadedTokens.size(), batchSizeMb, elapsedTimeSec, album.title());
             if (remainingFiles > 0) {
-                System.out.println(String.format("Remaining %d files (%.1f MB) to upload. ETA: %.1f min", remainingFiles, remainingSizeMb, etaMin));
+                System.out.printf("Remaining %d files (%.1f MB) to upload. ETA: %.1f min%n", remainingFiles, remainingSizeMb, etaMin);
             }
         }
     }
 
+    private static List<MediaWithName> resizeMediasToUpload(List<MediaWithName> mediasToUpload) {
+        int numCores = Runtime.getRuntime().availableProcessors();
+        ExecutorService taskExecutor = Executors.newFixedThreadPool(numCores);
+        ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue = new ConcurrentLinkedQueue<>(mediasToUpload);
+        List<MediaWithName> mediasToUploadSync = Collections.synchronizedList(new ArrayList<>(mediasToUpload.size()));
+        for (int i = 0; i< numCores; i++) {
+            taskExecutor.submit(getResizerTask(i, mediasToResizeQueue, mediasToUploadSync));
+        }
+        taskExecutor.shutdown();
+        try {
+            taskExecutor.awaitTermination(1, TimeUnit.DAYS);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        Collections.sort(mediasToUploadSync);
+        return mediasToUploadSync;
+    }
+
+//    private Runnable getUploaderTask(Album album, List<MediaWithName> mediasToUpload, BlockingQueue<MediaWithName> mediasToUploadQueue) {
+//        AtomicInteger numMediasToUpload = new AtomicInteger(mediasToUpload.size());
+//        Runnable uploaderTask = () -> {
+//            List<String> uploadedTokens = new ArrayList<>();
+//            while(numMediasToUpload.getAndDecrement() > 0){
+//                MediaWithName media = mediasToUploadQueue.take();
+//                System.out.println("Uploading " + media.name);
+//                String newMediaToken = googlePhotosAPI.uploadSingleFile(media.name, media.file);
+//                if (newMediaToken != null) {
+//                    uploadedTokens.add(newMediaToken);
+//                }
+//                if (uploadedTokens.size() >= 5 || numMediasToUpload.get() == 0){
+//                    System.out.println("Saving to album " + album.title());
+//                    googlePhotosAPI.saveToAlbum(album, uploadedTokens);
+//                    uploadedTokens.clear();
+//                }
+//            }
+//        };
+//        return uploaderTask;
+//    }
+
+    private static Runnable getResizerTask(int index, ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue, List<MediaWithName> mediasToUpload) {
+        return () -> {
+            while (!mediasToResizeQueue.isEmpty()) {
+                MediaWithName mediaToResize = mediasToResizeQueue.poll();
+                if (mediaToResize != null) {
+                    if (ImageUtils.isJPEG(mediaToResize.file)) {
+                        System.out.println(index + " resizing "+mediaToResize.name);
+                        File resizedFile = ImageUtils.resizeJPGImage(mediaToResize.file, MAX_FREE_DIMENSION);
+                        mediaToResize = new MediaWithName(mediaToResize.name, resizedFile);
+                    }
+                    mediasToUpload.add(mediaToResize);
+                }
+            }
+        };
+    }
+
     private List<MediaWithName> getMediasToUpload(List<File> files, Set<String> albumFileNames) {
-        List<MediaWithName> mediasToUpload = files.stream()
+        return files.stream()
                 .map(file -> new MediaWithName(AlbumUtils.file2MediaName(file), file))
                 .filter(media -> !albumFileNames.contains(media.name))
-                .sorted()
                 .collect(Collectors.toList());
-        return mediasToUpload;
     }
 
 }

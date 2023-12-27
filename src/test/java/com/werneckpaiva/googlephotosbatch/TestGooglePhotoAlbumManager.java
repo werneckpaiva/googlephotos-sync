@@ -49,10 +49,10 @@ public class TestGooglePhotoAlbumManager {
     public void testListAlbumsNonEmpty() {
         // Setup
         InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = mock(InternalPhotosLibraryClient.ListAlbumsPagedResponse.class);
-        List<com.google.photos.library.v1.proto.Album> albums = Arrays.asList(
-                mock(com.google.photos.library.v1.proto.Album.class),
-                mock(com.google.photos.library.v1.proto.Album.class),
-                mock(com.google.photos.library.v1.proto.Album.class));
+        List<com.google.photos.types.proto.Album> albums = Arrays.asList(
+                mock(com.google.photos.types.proto.Album.class),
+                mock(com.google.photos.types.proto.Album.class),
+                mock(com.google.photos.types.proto.Album.class));
         when(albums.get(0).getTitle()).thenReturn("Album 1");
         when(albums.get(1).getTitle()).thenReturn("Album 2");
         when(albums.get(2).getTitle()).thenReturn("Album 3");
@@ -72,6 +72,44 @@ public class TestGooglePhotoAlbumManager {
     public void testBatchUpload1SmallFile() throws ExecutionException, InterruptedException {
         // Setup
         String albumId = "123";
+        PhotosLibraryClient photosLibraryClient = mockPhotosLibraryClient(albumId);
+        GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(photosLibraryClient);
+
+        Album album = new Album("My Album", albumId, true);
+
+        List<File> files = Arrays.asList(
+                getImageFile("photo_portrait_small.JPG")
+        );
+
+        // Execute
+        GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
+        googlePhotoAlbumManager.batchUploadFiles(album, files);
+        verify(photosLibraryClient, times(1)).uploadMediaItem(any());
+    }
+
+    @Test
+    public void testBatchUploadMultipleFile() throws ExecutionException, InterruptedException {
+        // Setup
+        String albumId = "123";
+        PhotosLibraryClient photosLibraryClient = mockPhotosLibraryClient(albumId);
+        GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(photosLibraryClient);
+
+        Album album = new Album("My Album", albumId, true);
+
+        List<File> files = Arrays.asList(
+                getImageFile("photo_landscape_big.JPG"),
+                getImageFile("photo_portrait_big.JPG"),
+                getImageFile("photo_portrait_small.JPG")
+        );
+
+        // Execute
+        GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
+        googlePhotoAlbumManager.batchUploadFiles(album, files);
+
+        verify(photosLibraryClient, times(3)).uploadMediaItem(any());
+    }
+
+    private static PhotosLibraryClient mockPhotosLibraryClient(String albumId) throws InterruptedException, ExecutionException {
         InternalPhotosLibraryClient.SearchMediaItemsPagedResponse responseEmptyAlbum = mock(InternalPhotosLibraryClient.SearchMediaItemsPagedResponse.class);
         UploadMediaItemResponse uploadResponse = mock(UploadMediaItemResponse.class);
         when(uploadResponse.getUploadToken()).thenReturn(Optional.of("token"));
@@ -86,21 +124,13 @@ public class TestGooglePhotoAlbumManager {
         when(photosLibraryClient.searchMediaItems(albumId)).thenReturn(responseEmptyAlbum);
         when(photosLibraryClient.uploadMediaItem(any(UploadMediaItemRequest.class))).thenReturn(uploadResponse);
         when(photosLibraryClient.batchCreateMediaItemsCallable()).thenReturn(mediaCallable);
-        GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(photosLibraryClient);
+        return photosLibraryClient;
+    }
 
-        Album album = new Album("My Album", albumId, true);
-
-        String imageName = "photo_portrait_small.JPG";
+    private File getImageFile(String imageName) {
         URL resourceURL = getClass().getClassLoader().getResource(imageName);
         File imageFile = new File(resourceURL.getPath());
-
-        List<File> files = Arrays.asList(imageFile);
-
-        // Execute
-        GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
-        googlePhotoAlbumManager.batchUploadFiles(album, files);
-
-
+        return imageFile;
     }
 
 }
