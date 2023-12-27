@@ -38,6 +38,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+
 import com.google.api.client.json.gson.GsonFactory;
 
 public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
@@ -46,13 +47,14 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
 
     private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
 
-    private static final File CREDENTIALS_DATA_FILE = new File( "credentials");
+    private final int ALBUM_BATCH_SIZE = 10;
+
+    private static final File CREDENTIALS_DATA_FILE = new File("credentials");
 
     private static final List<String> REQUIRED_SCOPES =
             ImmutableList.of(
                     "https://www.googleapis.com/auth/photoslibrary.readonly",
                     "https://www.googleapis.com/auth/photoslibrary.appendonly");
-
 
 
     public GooglePhotosAPIV1LibraryImpl(PhotosLibraryClient photosLibraryClient) {
@@ -109,6 +111,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                 .setRefreshToken(credential.getRefreshToken())
                 .build();
     }
+
     public Set<String> retrieveFilesFromAlbum(Album album) {
         byte retry = 0;
         while (retry++ < 100) {
@@ -125,7 +128,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
     }
 
     public String uploadSingleFile(String mediaName, File file) {
-        System.out.println("Uploading " + mediaName);
+        System.out.printf("Uploading %s\n", mediaName);
         try {
             UploadMediaItemRequest uploadRequest =
                     UploadMediaItemRequest.newBuilder()
@@ -148,11 +151,22 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
 
     public Album createAlbum(String albumName) {
         com.google.photos.types.proto.Album googleAlbum = photosLibraryClient.createAlbum(albumName)
-                    .toBuilder().setIsWriteable(true).build();
-            return googleAlbum2Album(googleAlbum);
+                .toBuilder().setIsWriteable(true).build();
+        return googleAlbum2Album(googleAlbum);
     }
 
     public void saveToAlbum(Album album, List<String> uploadedTokens) {
+        if (uploadedTokens.isEmpty()) return;
+        if (uploadedTokens.size() > ALBUM_BATCH_SIZE) {
+            for (int i = 0; i <= uploadedTokens.size() / ALBUM_BATCH_SIZE; i++) {
+                int fromIndex = i * ALBUM_BATCH_SIZE;
+                if (fromIndex >= uploadedTokens.size()) return;
+                int toIndex = Math.min((i + 1) * ALBUM_BATCH_SIZE, uploadedTokens.size());
+                saveToAlbumInIdealBatchSize(album, uploadedTokens.subList(fromIndex, toIndex));
+            }
+        }
+    }
+    private void saveToAlbumInIdealBatchSize(Album album, List<String> uploadedTokens) {
         int retries = 0;
         List<NewMediaItem> mediasUploaded = uploadedTokens.stream().map(token -> NewMediaItemFactory.createNewMediaItem(token)).collect(Collectors.toList());
         while (retries++ < 3) {
@@ -185,7 +199,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
         }
     }
 
-    public Iterable<Album> getAllAlbums(){
+    public Iterable<Album> getAllAlbums() {
         ListAlbumsRequest listAlbumsRequest = ListAlbumsRequest.newBuilder()
                 .setExcludeNonAppCreatedData(false)
                 .setPageSize(50)
@@ -198,7 +212,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
             public Iterator<Album> iterator() {
                 Iterator<com.google.photos.types.proto.Album> iterator = albumsIterable.iterator();
 
-                return new Iterator<Album>(){
+                return new Iterator<Album>() {
 
                     @Override
                     public boolean hasNext() {
@@ -215,7 +229,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
         };
     }
 
-    public static Album googleAlbum2Album(com.google.photos.types.proto.Album googleAlbum){
+    public static Album googleAlbum2Album(com.google.photos.types.proto.Album googleAlbum) {
         Album album = new Album(googleAlbum.getTitle(), googleAlbum.getId(), googleAlbum.getIsWriteable());
         return album;
     }

@@ -93,7 +93,6 @@ public class TestGooglePhotoAlbumManager {
         String albumId = "123";
         PhotosLibraryClient photosLibraryClient = mockPhotosLibraryClient(albumId);
         GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(photosLibraryClient);
-
         Album album = new Album("My Album", albumId, true);
 
         List<File> files = Arrays.asList(
