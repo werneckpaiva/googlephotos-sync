@@ -55,7 +55,7 @@ public class GooglePhotoAlbumManager {
                 System.out.print("x");
             }
         }
-        System.out.printf(" %d albums loaded (%d ms)", allAlbums.size(), (System.currentTimeMillis() - startTime));
+        System.out.printf(" %d albums loaded (%d ms)\n", allAlbums.size(), (System.currentTimeMillis() - startTime));
         return allAlbums;
 
     }
@@ -68,7 +68,7 @@ public class GooglePhotoAlbumManager {
     }
 
     public Album createAlbum(String albumName) {
-        System.out.println("Creating album " + albumName);
+        System.out.printf("Creating album %s\n", albumName);
         Album album = googlePhotosAPI.createAlbum(albumName);
         this.albums.put(albumName, album);
         return album;
@@ -153,7 +153,9 @@ public class GooglePhotoAlbumManager {
     private Runnable getUploaderTask(int totalNumMedias, BlockingQueue<MediaWithName> mediasToUploadQueue, List<MediaWithName> mediasUploaded) {
         AtomicInteger numMediasToUpload = new AtomicInteger(totalNumMedias);
         return () -> {
-            while (numMediasToUpload.getAndDecrement() > 0) {
+            Integer currentMediasToUpload;
+            while ((currentMediasToUpload = numMediasToUpload.getAndDecrement()) > 0) {
+                System.out.printf("Remaining medias to upload: %d\n", currentMediasToUpload);
                 try {
                     MediaWithName media = mediasToUploadQueue.take();
                     String newMediaToken = googlePhotosAPI.uploadSingleFile(media.name, media.file);
@@ -170,6 +172,7 @@ public class GooglePhotoAlbumManager {
     private static Runnable getResizerTask(int index, ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue, BlockingQueue<MediaWithName> mediasToUpload) {
         return () -> {
             while (!mediasToResizeQueue.isEmpty()) {
+                System.out.printf("Medias to resize: %d\n", mediasToResizeQueue.size());
                 MediaWithName mediaToResize = mediasToResizeQueue.poll();
                 if (mediaToResize != null) {
                     if (ImageUtils.isJPEG(mediaToResize.file)) {
@@ -183,6 +186,7 @@ public class GooglePhotoAlbumManager {
                     }
                 }
             }
+            System.out.printf("Finalizing task %d\n", index);
         };
     }
 

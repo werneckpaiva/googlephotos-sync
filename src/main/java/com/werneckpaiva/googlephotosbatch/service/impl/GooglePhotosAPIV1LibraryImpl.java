@@ -141,6 +141,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                 throw new IOException(error.getCause());
             }
             String uploadToken = uploadResponse.getUploadToken().get();
+            System.out.printf("Uploaded %s\n", mediaName);
             return uploadToken;
         } catch (IOException | ApiException e) {
             System.out.println(" Can't upload file " + file);
@@ -162,6 +163,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                 int fromIndex = i * ALBUM_BATCH_SIZE;
                 if (fromIndex >= uploadedTokens.size()) return;
                 int toIndex = Math.min((i + 1) * ALBUM_BATCH_SIZE, uploadedTokens.size());
+                System.out.printf("From %d to %d\n", fromIndex, toIndex);
                 saveToAlbumInIdealBatchSize(album, uploadedTokens.subList(fromIndex, toIndex));
             }
         }
