@@ -158,14 +158,12 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
 
     public void saveToAlbum(Album album, List<String> uploadedTokens) {
         if (uploadedTokens.isEmpty()) return;
-        if (uploadedTokens.size() > ALBUM_BATCH_SIZE) {
-            for (int i = 0; i <= uploadedTokens.size() / ALBUM_BATCH_SIZE; i++) {
-                int fromIndex = i * ALBUM_BATCH_SIZE;
-                if (fromIndex >= uploadedTokens.size()) return;
-                int toIndex = Math.min((i + 1) * ALBUM_BATCH_SIZE, uploadedTokens.size());
-                System.out.printf("From %d to %d\n", fromIndex, toIndex);
-                saveToAlbumInIdealBatchSize(album, uploadedTokens.subList(fromIndex, toIndex));
-            }
+        for (int i = 0; i <= uploadedTokens.size() / ALBUM_BATCH_SIZE; i++) {
+            int fromIndex = i * ALBUM_BATCH_SIZE;
+            if (fromIndex >= uploadedTokens.size()) return;
+            int toIndex = Math.min((i + 1) * ALBUM_BATCH_SIZE, uploadedTokens.size());
+            System.out.printf("From %d to %d\n", fromIndex, toIndex);
+            saveToAlbumInIdealBatchSize(album, uploadedTokens.subList(fromIndex, toIndex));
         }
     }
     private void saveToAlbumInIdealBatchSize(Album album, List<String> uploadedTokens) {
