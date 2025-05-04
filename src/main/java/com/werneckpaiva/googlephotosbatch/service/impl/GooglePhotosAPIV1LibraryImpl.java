@@ -151,9 +151,24 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
     }
 
     public Album createAlbum(String albumName) {
-        com.google.photos.types.proto.Album googleAlbum = photosLibraryClient.createAlbum(albumName)
-                .toBuilder().setIsWriteable(true).build();
-        return googleAlbum2Album(googleAlbum);
+        int retries = 0;
+        while (retries++ < 3) {
+            try {
+                try {
+                    com.google.photos.types.proto.Album googleAlbum = photosLibraryClient.createAlbum(albumName)
+                            .toBuilder().setIsWriteable(true).build();
+                    return googleAlbum2Album(googleAlbum);
+                } catch (ApiException e) {
+                    e.printStackTrace();
+                    System.out.println("Retrying after 30s...");
+                    Thread.sleep(30000);
+                }
+            } catch (InterruptedException ex) {
+                System.out.println("Retry waiting interrupted");
+                throw new RuntimeException(ex);
+            }
+        }
+        return null;
     }
 
     public void saveToAlbum(Album album, List<String> uploadedTokens) {
@@ -166,6 +181,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
             saveToAlbumInIdealBatchSize(album, uploadedTokens.subList(fromIndex, toIndex));
         }
     }
+
     private void saveToAlbumInIdealBatchSize(Album album, List<String> uploadedTokens) {
         int retries = 0;
         List<NewMediaItem> mediasUploaded = uploadedTokens.stream().map(token -> NewMediaItemFactory.createNewMediaItem(token)).collect(Collectors.toList());
