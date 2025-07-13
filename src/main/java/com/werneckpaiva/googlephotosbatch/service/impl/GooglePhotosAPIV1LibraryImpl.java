@@ -27,7 +27,7 @@ import com.google.rpc.Code;
 import com.google.rpc.Status;
 import com.werneckpaiva.googlephotosbatch.service.Album;
 import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
-import com.werneckpaiva.googlephotosbatch.service.GooglePhotosServiceException;
+import com.werneckpaiva.googlephotosbatch.exception.GooglePhotosServiceException;
 
 import java.io.*;
 import java.net.URL;
@@ -173,8 +173,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
             System.out.printf("Uploaded %s\n", mediaName);
             return uploadToken;
         } catch (IOException | ApiException e) {
-            System.out.println(" Can't upload file " + file);
-            e.printStackTrace();
+            logger.error("Can't upload file {}", file, e);
             return null;
         }
     }
@@ -188,8 +187,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                             .toBuilder().setIsWriteable(true).build();
                     return googleAlbum2Album(googleAlbum);
                 } catch (ApiException e) {
-                    e.printStackTrace();
-                    System.out.println("Retrying after 30s...");
+                    logger.error("Error creating album, retrying after 30s...", e);
                     Thread.sleep(30000);
                 }
             } catch (InterruptedException ex) {
@@ -233,8 +231,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                     }
                     break;
                 } catch (ExecutionException e) {
-                    e.printStackTrace();
-                    System.out.println("Retrying after 30s...");
+                    logger.error("Error saving items to album, retrying after 30s...", e);
                     Thread.sleep(30000);
                 }
             } catch (InterruptedException ex) {

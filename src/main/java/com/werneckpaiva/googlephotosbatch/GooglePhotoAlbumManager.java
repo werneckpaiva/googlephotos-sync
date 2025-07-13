@@ -12,6 +12,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Manages Google Photo Albums
@@ -103,11 +104,20 @@ public class GooglePhotoAlbumManager {
         ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue = new ConcurrentLinkedQueue<>(mediasToUpload);
         List<MediaWithName> mediasUploaded = Collections.synchronizedList(new ArrayList<>(mediasToUpload.size()));
         BlockingQueue<MediaWithName> mediasToUploadQueue = new LinkedBlockingQueue<>();
-        for (int i = 0; i < numCores; i++) {
-            taskExecutor.submit(getResizerTask(i, mediasToResizeQueue, mediasToUploadQueue));
-        }
-        taskExecutor.submit(getUploaderTask(mediasToUpload.size(), mediasToUploadQueue, mediasUploaded));
-        //TODO: Implement stats
+
+
+        List<Future<Void>> resizerTasks = IntStream.range(0, numCores)
+                .mapToObj(i -> getResizerTask(mediasToResizeQueue, mediasToUploadQueue))
+                .map(taskExecutor::submit)
+                .toList();
+
+        List<Future<Void>> uploaderTasks = IntStream.range(0, 1)
+                .mapToObj(i -> getUploaderTask(mediasToUpload.size(), mediasToUploadQueue, mediasUploaded))
+                .map(taskExecutor::submit)
+                .toList();
+
+        taskExecutor.submit(getWatcherTask(resizerTasks, uploaderTasks, mediasToResizeQueue, mediasToUploadQueue, mediasUploaded));
+
         taskExecutor.shutdown();
         try {
             taskExecutor.awaitTermination(1, TimeUnit.DAYS);
@@ -126,12 +136,33 @@ public class GooglePhotoAlbumManager {
         }
     }
 
-    private Runnable getUploaderTask(int totalNumMedias, BlockingQueue<MediaWithName> mediasToUploadQueue, List<MediaWithName> mediasUploaded) {
+    private static Runnable getWatcherTask(
+            List<Future<Void>> resizerTasks,
+            List<Future<Void>> uploaderTasks,
+            ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue,
+            BlockingQueue<MediaWithName> mediasToUploadQueue,
+            List<MediaWithName> mediasUploaded) {
+
+        return () -> {
+            while (!mediasToResizeQueue.isEmpty() && !mediasToUploadQueue.isEmpty()) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            System.out.println("\n🎉 All tasks complete! 🎉");
+        };
+    }
+
+
+    private Callable<Void> getUploaderTask(int totalNumMedias, BlockingQueue<MediaWithName> mediasToUploadQueue, List<MediaWithName> mediasUploaded) {
         AtomicInteger numMediasToUpload = new AtomicInteger(totalNumMedias);
         return () -> {
-            Integer currentMediasToUpload;
+            int currentMediasToUpload;
             while ((currentMediasToUpload = numMediasToUpload.getAndDecrement()) > 0) {
-                System.out.printf("Remaining medias to upload: %d\n", currentMediasToUpload);
+//                System.out.printf("Remaining medias to upload: %d\n", currentMediasToUpload);
                 try {
                     MediaWithName media = mediasToUploadQueue.take();
                     String newMediaToken = googlePhotosAPI.uploadSingleFile(media.name, media.file);
@@ -142,13 +173,14 @@ public class GooglePhotoAlbumManager {
                     throw new RuntimeException(e);
                 }
             }
+            return null;
         };
     }
 
-    private static Runnable getResizerTask(int index, ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue, BlockingQueue<MediaWithName> mediasToUpload) {
+    private static Callable<Void> getResizerTask(ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue, BlockingQueue<MediaWithName> mediasToUpload) {
         return () -> {
             while (!mediasToResizeQueue.isEmpty()) {
-                System.out.printf("Medias to resize: %d\n", mediasToResizeQueue.size());
+//                System.out.printf("Medias to resize: %d\n", mediasToResizeQueue.size());
                 MediaWithName mediaToResize = mediasToResizeQueue.poll();
                 if (mediaToResize != null) {
                     if (ImageUtils.isJPEG(mediaToResize.file)) {
@@ -162,7 +194,8 @@ public class GooglePhotoAlbumManager {
                     }
                 }
             }
-            System.out.printf("Finalizing task %d\n", index);
+//            System.out.printf("Finalizing task %d\n", index);
+            return null;
         };
     }
 

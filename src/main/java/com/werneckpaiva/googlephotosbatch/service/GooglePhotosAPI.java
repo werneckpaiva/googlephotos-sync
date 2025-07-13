@@ -16,6 +16,5 @@ public interface GooglePhotosAPI {
 
     Album createAlbum(String albumName);
 
-
     Iterable<Album> getAllAlbums();
 }

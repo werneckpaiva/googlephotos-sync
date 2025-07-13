@@ -1,4 +1,4 @@
-package com.werneckpaiva.googlephotosbatch.service;
+package com.werneckpaiva.googlephotosbatch.exception;
 
 public class GooglePhotosServiceException extends Exception{
     public GooglePhotosServiceException(String message, Exception e) {

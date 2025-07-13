@@ -3,7 +3,7 @@ package com.werneckpaiva.googlephotosbatch;
 import com.werneckpaiva.googlephotosbatch.exception.PermissionDeniedToLoadAlbumsException;
 import com.werneckpaiva.googlephotosbatch.service.Album;
 import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
-import com.werneckpaiva.googlephotosbatch.service.GooglePhotosServiceException;
+import com.werneckpaiva.googlephotosbatch.exception.GooglePhotosServiceException;
 import com.werneckpaiva.googlephotosbatch.service.impl.GooglePhotosAPIV1LibraryImpl;
 import com.werneckpaiva.googlephotosbatch.utils.AlbumUtils;
 
