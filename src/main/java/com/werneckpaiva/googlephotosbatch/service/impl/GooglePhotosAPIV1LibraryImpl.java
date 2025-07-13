@@ -39,6 +39,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.google.api.client.json.gson.GsonFactory;
 
 public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
@@ -51,9 +53,11 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
 
     private static final File CREDENTIALS_DATA_FILE = new File("credentials");
 
+    private static final Logger logger = LoggerFactory.getLogger(GooglePhotosAPIV1LibraryImpl.class);
+
     private static final List<String> REQUIRED_SCOPES =
             ImmutableList.of(
-                    "https://www.googleapis.com/auth/photoslibrary.readonly",
+                    "https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata",
                     "https://www.googleapis.com/auth/photoslibrary.appendonly");
 
 
@@ -68,7 +72,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
     private static PhotosLibraryClient createPhotosLibraryClient(URL credentialsURL) throws GooglePhotosServiceException {
         PhotosLibrarySettings settings = null;
         try {
-            Credentials credentials = GooglePhotosAPIV1LibraryImpl.getUserCredentials(credentialsURL);
+            Credentials credentials = GooglePhotosAPIV1LibraryImpl.loadUserCredentials(credentialsURL);
             settings = PhotosLibrarySettings
                     .newBuilder()
                     .setCredentialsProvider(
@@ -84,7 +88,31 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
         }
     }
 
-    private static Credentials getUserCredentials(URL credentialsURL) throws IOException, GeneralSecurityException {
+    public void logout() {
+        if (CREDENTIALS_DATA_FILE.exists()) {
+            deleteFolder(CREDENTIALS_DATA_FILE);
+            logger.info("Logged out successfully. Credentials deleted.");
+        } else {
+            logger.info("No credentials found to delete.");
+        }
+    }
+
+    private void deleteFolder(File folder) {
+        File[] files = folder.listFiles();
+        if (files != null) {
+            for (File f : files) {
+                if (f.isDirectory()) {
+                    deleteFolder(f);
+                } else {
+                    f.delete();
+                }
+            }
+        }
+        folder.delete();
+    }
+
+
+    private static Credentials loadUserCredentials(URL credentialsURL) throws IOException, GeneralSecurityException {
         InputStream credentialsInputStream = credentialsURL.openStream();
         assert credentialsInputStream != null;
         GoogleClientSecrets clientSecrets =
@@ -93,13 +121,14 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
         String clientId = clientSecrets.getDetails().getClientId();
         String clientSecret = clientSecrets.getDetails().getClientSecret();
 
+        FileDataStoreFactory credentialsDataStore = new FileDataStoreFactory(CREDENTIALS_DATA_FILE);
         GoogleAuthorizationCodeFlow flow =
                 new GoogleAuthorizationCodeFlow.Builder(
                         GoogleNetHttpTransport.newTrustedTransport(),
                         JSON_FACTORY,
                         clientSecrets,
                         REQUIRED_SCOPES)
-                        .setDataStoreFactory(new FileDataStoreFactory(CREDENTIALS_DATA_FILE))
+                        .setDataStoreFactory(credentialsDataStore)
                         .setAccessType("offline")
                         .build();
         LocalServerReceiver receiver =

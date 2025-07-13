@@ -12,6 +12,7 @@ import com.google.photos.library.v1.proto.BatchCreateMediaItemsResponse;
 import com.google.photos.library.v1.proto.ListAlbumsRequest;
 import com.google.photos.library.v1.upload.UploadMediaItemRequest;
 import com.google.photos.library.v1.upload.UploadMediaItemResponse;
+import com.werneckpaiva.googlephotosbatch.exception.PermissionDeniedToLoadAlbumsException;
 import com.werneckpaiva.googlephotosbatch.service.Album;
 import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
 import com.werneckpaiva.googlephotosbatch.service.impl.GooglePhotosAPIV1LibraryImpl;
@@ -32,7 +33,7 @@ import com.google.api.gax.rpc.UnaryCallable;
 public class TestGooglePhotoAlbumManager {
 
     @Test
-    public void testListAlbumsEmptyList() {
+    public void testListAlbumsEmptyList() throws PermissionDeniedToLoadAlbumsException {
         // Setup
         InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = mock(InternalPhotosLibraryClient.ListAlbumsPagedResponse.class);
         PhotosLibraryClient photosLibraryClient = mock(PhotosLibraryClient.class);
@@ -46,7 +47,7 @@ public class TestGooglePhotoAlbumManager {
     }
 
     @Test
-    public void testListAlbumsNonEmpty() {
+    public void testListAlbumsNonEmpty() throws PermissionDeniedToLoadAlbumsException {
         // Setup
         InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = mock(InternalPhotosLibraryClient.ListAlbumsPagedResponse.class);
         List<com.google.photos.types.proto.Album> albums = Arrays.asList(

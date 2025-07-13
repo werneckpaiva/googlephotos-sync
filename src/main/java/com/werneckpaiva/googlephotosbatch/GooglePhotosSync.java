@@ -1,11 +1,14 @@
 package com.werneckpaiva.googlephotosbatch;
 
+import com.werneckpaiva.googlephotosbatch.exception.PermissionDeniedToLoadAlbumsException;
 import com.werneckpaiva.googlephotosbatch.service.Album;
 import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
 import com.werneckpaiva.googlephotosbatch.service.GooglePhotosServiceException;
 import com.werneckpaiva.googlephotosbatch.service.impl.GooglePhotosAPIV1LibraryImpl;
 import com.werneckpaiva.googlephotosbatch.utils.AlbumUtils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.net.URL;
 import java.util.ArrayList;
@@ -16,6 +19,8 @@ import java.util.regex.Pattern;
 public class GooglePhotosSync {
 
     private static final Pattern ALLOWED_FILES_PATTERN = Pattern.compile("\\.(jpe?g|mp4|mov)$", Pattern.CASE_INSENSITIVE);
+
+    private static final Logger logger = LoggerFactory.getLogger(GooglePhotosSync.class);
     private static final String CREDENTIALS_JSON = "credentials.json";
 
     public static void main(String[] args){
@@ -43,12 +48,13 @@ public class GooglePhotosSync {
         try {
             googlePhotosSync.run(baseFolder, foldersToProcess);
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("Error running GooglePhotosSync", e);
         }
     }
 
     public void run(String baseFolder, List<String> foldersToProcess) throws GooglePhotosServiceException {
         URL credentialsURL = getClass().getClassLoader().getResource(CREDENTIALS_JSON);
+
         GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(credentialsURL);
         GooglePhotoAlbumManager googlePhotosAlbums = new GooglePhotoAlbumManager(googlePhotoService);
 
@@ -57,12 +63,25 @@ public class GooglePhotosSync {
             if (!folderFile.exists()) {
                 continue;
             }
-            uploadFoldersRecursively(googlePhotosAlbums, baseFolder, folderFile);
+            int retries = 0;
+            while (retries < 2) {
+                try {
+                    uploadFoldersRecursively(googlePhotosAlbums, baseFolder, folderFile);
+                    break;
+                } catch (PermissionDeniedToLoadAlbumsException e) {
+                    logger.error("Permission denied. New authentication required");
+                    googlePhotoService.logout();
+                    retries++;
+                    if (retries >= 2) {
+                        logger.error("Failed to process folder {} after multiple retries. Skipping.", folderToProcess);
+                    }
+                }
+            }
         }
 
     }
 
-    private void uploadFoldersRecursively(GooglePhotoAlbumManager googlePhotosAlbums, String baseFolder, File path) {
+    private void uploadFoldersRecursively(GooglePhotoAlbumManager googlePhotoAlbumManager, String baseFolder, File path) throws PermissionDeniedToLoadAlbumsException {
         List<File> files = new ArrayList<>();
         List<File> dirs = new ArrayList<>();
         for (File file : Objects.requireNonNull(path.listFiles())){
@@ -76,14 +95,14 @@ public class GooglePhotosSync {
         }
         if (!files.isEmpty()){
             String albumName = AlbumUtils.file2AlbumName(baseFolder, path);
-            Album album = googlePhotosAlbums.getAlbum(albumName);
+            Album album = googlePhotoAlbumManager.getAlbum(albumName);
             if (album == null){
-                album = googlePhotosAlbums.createAlbum(albumName);
+                album = googlePhotoAlbumManager.createAlbum(albumName);
             }
-            googlePhotosAlbums.batchUploadFiles(album, files);
+            googlePhotoAlbumManager.batchUploadFiles(album, files);
         }
         for (File dir : dirs){
-            uploadFoldersRecursively(googlePhotosAlbums, baseFolder, dir);
+            uploadFoldersRecursively(googlePhotoAlbumManager, baseFolder, dir);
         }
     }
 

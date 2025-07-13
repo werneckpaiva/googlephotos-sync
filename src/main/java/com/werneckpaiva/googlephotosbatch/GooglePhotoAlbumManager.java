@@ -1,5 +1,7 @@
 package com.werneckpaiva.googlephotosbatch;
 
+import com.google.api.gax.rpc.PermissionDeniedException;
+import com.werneckpaiva.googlephotosbatch.exception.PermissionDeniedToLoadAlbumsException;
 import com.werneckpaiva.googlephotosbatch.service.Album;
 import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
 import com.werneckpaiva.googlephotosbatch.utils.AlbumUtils;
@@ -11,14 +13,18 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-
+/**
+ * Manages Google Photo Albums
+ * Keeps Google Service state
+ * Uploads one folder a time
+ */
 public class GooglePhotoAlbumManager {
 
     private final GooglePhotosAPI googlePhotosAPI;
 
     private Map<String, Album> albums = null;
 
-    public static final int MAX_FREE_DIMENSION = 2048;
+    public static final int MAX_FREE_DIMENSION = 4608;
 
     private record MediaWithName(String name, File file, String uploadToken) implements Comparable<MediaWithName> {
         public MediaWithName(String name, File resizedFile) {
@@ -35,7 +41,7 @@ public class GooglePhotoAlbumManager {
         this.googlePhotosAPI = googlePhotosAPI;
     }
 
-    public Map<String, Album> listAllAlbums() {
+    public Map<String, Album> listAllAlbums() throws PermissionDeniedToLoadAlbumsException {
         System.out.print("Loading albums ");
 
         long startTime = System.currentTimeMillis();
@@ -51,7 +57,10 @@ public class GooglePhotoAlbumManager {
                     allAlbums.put(album.title(), album);
                 }
                 break;
+            } catch (PermissionDeniedException e) {
+                throw new PermissionDeniedToLoadAlbumsException(e);
             } catch (RuntimeException e) {
+                e.printStackTrace(System.err);
                 System.out.print("x");
             }
         }
@@ -60,7 +69,7 @@ public class GooglePhotoAlbumManager {
 
     }
 
-    public Album getAlbum(String albumName) {
+    public Album getAlbum(String albumName) throws PermissionDeniedToLoadAlbumsException {
         if (this.albums == null) {
             this.albums = listAllAlbums();
         }
@@ -115,39 +124,6 @@ public class GooglePhotoAlbumManager {
                             .map(MediaWithName::uploadToken)
                             .collect(Collectors.toList()));
         }
-
-//        Collections.sort(mediasToUploadSync);
-
-//        double totalSizeMb = resizedMediasToUpload.stream()
-//                .mapToDouble(mediaWithFile -> mediaWithFile.file.length() / 1024.0 / 1024.0).sum();
-//        double processedSizeMb = 0;
-//        int remainingFiles = resizedMediasToUpload.size();
-//        Iterator<MediaWithName> newMediasIterator = resizedMediasToUpload.iterator();
-//        while (newMediasIterator.hasNext()) {
-//            List<String> uploadedTokens = new ArrayList<>();
-//            long start = System.currentTimeMillis();
-//            double batchSizeMb = 0;
-//            while (uploadedTokens.size() < 10 && newMediasIterator.hasNext()) {
-//                MediaWithName media = newMediasIterator.next();
-//                double fileSizeMb = media.file.length() / 1024.0 / 1024.0;
-//                String newMediaToken = googlePhotosAPI.uploadSingleFile(media.name, media.file);
-//                batchSizeMb += fileSizeMb;
-//                processedSizeMb += fileSizeMb;
-//                if (newMediaToken != null) {
-//                    uploadedTokens.add(newMediaToken);
-//                }
-//            }
-//            if (uploadedTokens.isEmpty()) continue;
-//            googlePhotosAPI.saveToAlbum(album, uploadedTokens);
-//            long elapsedTimeSec = (System.currentTimeMillis() - start) / 1000;
-//            double remainingSizeMb = (totalSizeMb - processedSizeMb);
-//            remainingFiles -= uploadedTokens.size();
-//            double etaMin = ((batchSizeMb / elapsedTimeSec) * remainingSizeMb) / 60.0;
-//            System.out.printf("%d items (%.1f MB) uploaded in %ds to album: %s%n", uploadedTokens.size(), batchSizeMb, elapsedTimeSec, album.title());
-//            if (remainingFiles > 0) {
-//                System.out.printf("Remaining %d files (%.1f MB) to upload. ETA: %.1f min%n", remainingFiles, remainingSizeMb, etaMin);
-//            }
-//        }
     }
 
     private Runnable getUploaderTask(int totalNumMedias, BlockingQueue<MediaWithName> mediasToUploadQueue, List<MediaWithName> mediasUploaded) {

@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.Set;
 
 public interface GooglePhotosAPI {
+
+    void logout();
+
     Set<String> retrieveFilesFromAlbum(Album album);
 
     String uploadSingleFile(String name, File file);
@@ -12,6 +15,7 @@ public interface GooglePhotosAPI {
     void saveToAlbum(Album album, List<String> mediasUploaded);
 
     Album createAlbum(String albumName);
+
 
     Iterable<Album> getAllAlbums();
 }
