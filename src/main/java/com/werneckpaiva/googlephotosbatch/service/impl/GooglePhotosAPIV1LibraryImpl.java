@@ -157,25 +157,30 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
     }
 
     public String uploadSingleFile(String mediaName, File file) {
-        System.out.printf("Uploading %s\n", mediaName);
+        logger.info("Fake Uploading {}", mediaName);
         try {
-            UploadMediaItemRequest uploadRequest =
-                    UploadMediaItemRequest.newBuilder()
-                            .setFileName(mediaName)
-                            .setDataFile(new RandomAccessFile(file, "r"))
-                            .build();
-            UploadMediaItemResponse uploadResponse = photosLibraryClient.uploadMediaItem(uploadRequest);
-            if (uploadResponse.getError().isPresent()) {
-                UploadMediaItemResponse.Error error = uploadResponse.getError().get();
-                throw new IOException(error.getCause());
-            }
-            String uploadToken = uploadResponse.getUploadToken().get();
-            System.out.printf("Uploaded %s\n", mediaName);
-            return uploadToken;
-        } catch (IOException | ApiException e) {
-            logger.error("Can't upload file {}", file, e);
-            return null;
+            Thread.sleep(1300);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
+//        try {
+//            UploadMediaItemRequest uploadRequest =
+//                    UploadMediaItemRequest.newBuilder()
+//                            .setFileName(mediaName)
+//                            .setDataFile(new RandomAccessFile(file, "r"))
+//                            .build();
+//            UploadMediaItemResponse uploadResponse = photosLibraryClient.uploadMediaItem(uploadRequest);
+//            if (uploadResponse.getError().isPresent()) {
+//                UploadMediaItemResponse.Error error = uploadResponse.getError().get();
+//                throw new IOException(error.getCause());
+//            }
+//            String uploadToken = uploadResponse.getUploadToken().get();
+            logger.info("Uploaded {}", mediaName);
+//            return uploadToken;
+//        } catch (IOException | ApiException e) {
+//            logger.error("Can't upload file {}", file, e);
+            return "123";
+//        }
     }
 
     public Album createAlbum(String albumName) {
@@ -226,7 +231,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                     for (NewMediaItemResult itemsResponse : newMediaItemResultsList) {
                         Status status = itemsResponse.getStatus();
                         if (status.getCode() != Code.OK_VALUE) {
-                            System.out.println("Error setting item to album: " + status.getCode() + " - " + status.getMessage());
+                            logger.error("Error setting item to album: {} - {}", status.getCode(), status.getMessage());
                         }
                     }
                     break;

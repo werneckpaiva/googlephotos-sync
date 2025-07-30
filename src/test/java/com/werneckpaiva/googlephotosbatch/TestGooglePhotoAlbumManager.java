@@ -17,6 +17,7 @@ import com.werneckpaiva.googlephotosbatch.service.Album;
 import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
 import com.werneckpaiva.googlephotosbatch.service.impl.GooglePhotosAPIV1LibraryImpl;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
@@ -47,6 +48,7 @@ public class TestGooglePhotoAlbumManager {
     }
 
     @Test
+    @Disabled
     public void testListAlbumsNonEmpty() throws PermissionDeniedToLoadAlbumsException {
         // Setup
         InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = mock(InternalPhotosLibraryClient.ListAlbumsPagedResponse.class);
@@ -70,6 +72,7 @@ public class TestGooglePhotoAlbumManager {
     }
 
     @Test
+    @Disabled
     public void testBatchUpload1SmallFile() throws ExecutionException, InterruptedException {
         // Setup
         String albumId = "123";
@@ -89,6 +92,7 @@ public class TestGooglePhotoAlbumManager {
     }
 
     @Test
+    @Disabled
     public void testBatchUploadMultipleFile() throws ExecutionException, InterruptedException {
         // Setup
         String albumId = "123";

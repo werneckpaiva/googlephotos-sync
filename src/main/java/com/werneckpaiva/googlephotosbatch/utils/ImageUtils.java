@@ -1,6 +1,7 @@
 package com.werneckpaiva.googlephotosbatch.utils;
 
 import com.werneckpaiva.googlephotosbatch.GooglePhotoAlbumManager;
+import org.slf4j.LoggerFactory;
 import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.ImageWriteException;
 import org.apache.commons.imaging.Imaging;
@@ -14,9 +15,12 @@ import org.imgscalr.Scalr;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.*;
+import org.slf4j.Logger;
 import java.util.regex.Pattern;
 
 public class ImageUtils {
+
+    private static final Logger logger = LoggerFactory.getLogger(ImageUtils.class);
 
     private static final Pattern JPEG_PATTERN = Pattern.compile("\\.jpe?g$", Pattern.CASE_INSENSITIVE);
 
@@ -36,8 +40,7 @@ public class ImageUtils {
                 return inputFile;
             }
 
-            System.out.println("Resizing " + inputFile.getName() +
-                    " (" + inputWidth + ", " + inputHeight + ") to (" + maxDimension + ")");
+            logger.info("Resizing {} ({}, {}) to ({})", inputFile.getName(), inputWidth, inputHeight, maxDimension);
 
             // Save existing metadata, if any
             TiffImageMetadata metadata = readExifMetadata(imageData);
@@ -60,8 +63,8 @@ public class ImageUtils {
             IOUtils.write(imageData,  fileOutputStream);
             fileOutputStream.close();
             return outputFile;
-        } catch (IOException|ImageWriteException|ImageReadException e) {
-            System.out.println("Couldn't resize "+inputFile);
+        } catch (IOException | ImageWriteException | ImageReadException e) {
+            logger.error("Couldn't resize {}", inputFile, e);
             e.printStackTrace();
             return inputFile;
         }
