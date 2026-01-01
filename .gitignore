@@ -4,5 +4,6 @@ credentials
 build/*
 gradle/
 gradlew
+gradlew.bat
 out/
 logs/

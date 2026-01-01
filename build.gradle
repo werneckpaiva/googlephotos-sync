@@ -1,10 +1,15 @@
 plugins {
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'com.gradleup.shadow' version '9.3.0'
     id 'java'
+    id 'application'
 }
 
 group 'com.werneckpaiva'
 version '1.0-SNAPSHOT'
+
+application {
+    mainClass = 'com.werneckpaiva.googlephotosbatch.GooglePhotosSync'
+}
 
 
 repositories {
@@ -27,11 +32,10 @@ dependencies {
 
     implementation platform('com.google.cloud:libraries-bom:26.60.0')
 
-    implementation 'com.google.oauth-client:google-oauth-client-jetty'
+    implementation 'com.google.oauth-client:google-oauth-client-jetty:1.37.0'
     implementation 'com.google.auth:google-auth-library-oauth2-http'
 
     implementation 'com.google.photos.library:google-photos-library-client:1.7.3'
-    implementation 'com.google.photos.library:google-photos-library-client'
     implementation 'com.google.api-client:google-api-client'
     implementation 'com.google.api-client:google-api-client-jackson2'
 
@@ -40,7 +44,7 @@ dependencies {
     implementation 'org.imgscalr:imgscalr-lib:4.2'
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.11.1'
-    testImplementation 'org.mockito:mockito-core:5.14.2'
+    testImplementation 'org.mockito:mockito-core:5.21.0'
 
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.11.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.2'
@@ -51,4 +55,5 @@ dependencies {
 test {
     useJUnitPlatform()
     maxHeapSize = '1G'
+    systemProperty 'net.bytebuddy.experimental', true
 }
