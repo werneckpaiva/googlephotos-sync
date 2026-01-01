@@ -1,5 +1,6 @@
 package com.werneckpaiva.googlephotosbatch;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.gax.rpc.PermissionDeniedException;
 import com.google.api.gax.rpc.UnauthenticatedException;
 import com.werneckpaiva.googlephotosbatch.exception.PermissionDeniedToLoadAlbumsException;
@@ -31,52 +32,95 @@ public class GooglePhotoAlbumManager {
 
     private Map<String, Album> albums = null;
 
+    private File albumsCache = null;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     public static final int MAX_FREE_DIMENSION = 4608;
 
     public GooglePhotoAlbumManager(GooglePhotosAPI googlePhotosAPI) {
         this.googlePhotosAPI = googlePhotosAPI;
     }
 
+    public void setAlbumsCache(File albumsCache) {
+        this.albumsCache = albumsCache;
+    }
+
     public Map<String, Album> listAllAlbums() throws PermissionDeniedToLoadAlbumsException {
-        logger.info("Loading albums ");
+        if (albumsCache != null && albumsCache.exists()) {
+            Map<String, Album> cachedAlbums = loadAlbumsFromCache();
+            if (cachedAlbums != null) {
+                return cachedAlbums;
+            }
+        }
+
+        logger.info("Loading albums from Google Photos API");
 
         long startTime = System.currentTimeMillis();
         Map<String, Album> allAlbums = new HashMap<>();
         byte retry = 0;
-        try (java.io.FileWriter fw = new java.io.FileWriter("/tmp/all_google_photo_albums.txt")) {
-            while (retry++ < 100) {
-                try {
-                    int i = 1;
-                    for (Album album : googlePhotosAPI.getAllAlbums()) {
 
-                        fw.write("{\"title\": \"");
-                        fw.write(album.title());
-                        fw.write("\", \"id\": \"");
-                        fw.write(album.id());
-                        fw.write("\", \"isWritable\": ");
-                        fw.write(album.isWriteable() ? "true" : "false");
-                        fw.write("}\n");
-
-                        if (i++ % 100 == 0) {
-                            System.out.print(".");
-                        }
-                        allAlbums.put(album.title(), album);
+        while (retry++ < 100) {
+            try {
+                int i = 1;
+                for (Album album : googlePhotosAPI.getAllAlbums()) {
+                    if (i++ % 100 == 0) {
+                        System.out.print(".");
                     }
-                    break;
-                } catch (PermissionDeniedException | UnauthenticatedException e) {
-                    throw new PermissionDeniedToLoadAlbumsException(e);
-                } catch (RuntimeException e) {
-                    e.printStackTrace(System.err);
-                    System.out.print("x");
+                    allAlbums.put(album.title(), album);
                 }
+                break;
+            } catch (PermissionDeniedException | UnauthenticatedException e) {
+                throw new PermissionDeniedToLoadAlbumsException(e);
+            } catch (RuntimeException e) {
+                e.printStackTrace(System.err);
+                System.out.print("x");
             }
-        } catch (java.io.IOException e) {
-            logger.error("Error writing album names to file", e);
+        }
+
+        if (albumsCache != null) {
+            saveAlbumsToCache(allAlbums);
         }
 
         System.out.printf(" %d albums loaded (%d ms)\n", allAlbums.size(), (System.currentTimeMillis() - startTime));
         return allAlbums;
+    }
 
+    private Map<String, Album> loadAlbumsFromCache() {
+        logger.info("Loading albums from cache file: {}", albumsCache.getAbsolutePath());
+        long startTime = System.currentTimeMillis();
+        Map<String, Album> allAlbums = new HashMap<>();
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(albumsCache))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.trim().isEmpty())
+                    continue;
+                try {
+                    Album album = objectMapper.readValue(line, Album.class);
+                    allAlbums.put(album.title(), album);
+                } catch (Exception e) {
+                    logger.warn("Failed to parse album line from cache: {}", line);
+                }
+            }
+            System.out.printf(" %d albums loaded from cache (%d ms)\n", allAlbums.size(),
+                    (System.currentTimeMillis() - startTime));
+            return allAlbums;
+        } catch (java.io.IOException e) {
+            logger.error("Error reading albums from cache", e);
+            return null;
+        }
+    }
+
+    private void saveAlbumsToCache(Map<String, Album> allAlbums) {
+        logger.info("Saving albums to cache file: {}", albumsCache.getAbsolutePath());
+        try (java.io.FileWriter fw = new java.io.FileWriter(albumsCache)) {
+            for (Album album : allAlbums.values()) {
+                fw.write(objectMapper.writeValueAsString(album));
+                fw.write("\n");
+            }
+        } catch (java.io.IOException e) {
+            logger.error("Error writing albums to cache", e);
+        }
     }
 
     private boolean skipAlbumLoad = false;

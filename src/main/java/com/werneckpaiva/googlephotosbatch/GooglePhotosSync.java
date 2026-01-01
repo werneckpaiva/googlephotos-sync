@@ -43,6 +43,10 @@ public class GooglePhotosSync implements Callable<Integer> {
             "--album-id" }, description = "ID of the album to add photos to. Automatically sets --skip-load")
     private String albumId;
 
+    @CommandLine.Option(names = {
+            "--albums-cache" }, description = "Path to a file to cache album information (JSON per line)")
+    private String albumsCache;
+
     public static void main(String[] args) {
         System.setProperty("io.netty.noUnsafe", "true");
         System.setProperty("io.grpc.netty.shaded.io.netty.noUnsafe", "true");
@@ -86,6 +90,9 @@ public class GooglePhotosSync implements Callable<Integer> {
         googlePhotosAlbums.setSkipAlbumLoad(skipLoad);
         if (albumId != null) {
             googlePhotosAlbums.setAlbumId(albumId);
+        }
+        if (albumsCache != null) {
+            googlePhotosAlbums.setAlbumsCache(new File(albumsCache));
         }
 
         for (String folderToProcess : foldersToProcess) {
