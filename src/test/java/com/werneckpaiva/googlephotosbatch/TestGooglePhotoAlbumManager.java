@@ -84,16 +84,18 @@ public class TestGooglePhotoAlbumManager {
     public void testBatchUploadWithSkipLoad() throws PermissionDeniedToLoadAlbumsException {
         // Setup
         GooglePhotosAPI googlePhotoService = mock(GooglePhotosAPI.class);
+        when(googlePhotoService.uploadSingleFile(anyString(), any())).thenReturn("some-token");
         GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
         googlePhotoAlbumManager.setSkipAlbumLoad(true);
         Album album = new Album("My Album", "123", true);
-        List<File> files = Arrays.asList(new File("image1.jpg"));
+        List<File> files = Arrays.asList(getImageFile("photo_portrait_small.JPG"));
 
         // Execute
         googlePhotoAlbumManager.batchUploadFiles(album, files);
 
         // Verify
         verify(googlePhotoService, never()).retrieveFilesFromAlbum(any());
+        verify(googlePhotoService, times(1)).uploadSingleFile(anyString(), any());
     }
 
     @Test

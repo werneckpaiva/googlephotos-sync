@@ -144,6 +144,7 @@ public class GooglePhotoAlbumManager {
             RESIZE_ALL_COMPLETED,
             UPLOAD_STARTED,
             UPLOAD_COMPLETED,
+            UPLOAD_FAILED,
             UPLOAD_ALL_COMPLETED
         }
 
@@ -247,6 +248,8 @@ public class GooglePhotoAlbumManager {
                     if (newMediaToken != null) {
                         progressLog.add(new MediaTaskLog(MediaTaskLog.Status.UPLOAD_COMPLETED, index, media));
                         mediasUploaded.add(new MediaWithName(media.name, media.file, newMediaToken));
+                    } else {
+                        progressLog.add(new MediaTaskLog(MediaTaskLog.Status.UPLOAD_FAILED, index, media));
                     }
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
@@ -305,6 +308,7 @@ public class GooglePhotoAlbumManager {
                                 break;
 
                             case UPLOAD_COMPLETED:
+                            case UPLOAD_FAILED:
                                 ProgressBar ub = workerBars.remove(workerKey);
                                 if (ub != null) {
                                     ub.stepTo(1);
