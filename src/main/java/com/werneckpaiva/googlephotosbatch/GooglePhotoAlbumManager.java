@@ -15,13 +15,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import org.fusesource.jansi.Ansi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import me.tongfei.progressbar.ProgressBar;
-import me.tongfei.progressbar.ProgressBarBuilder;
-import me.tongfei.progressbar.ProgressBarStyle;
 
 /**
  * Manages Google Photo Albums
@@ -37,17 +32,6 @@ public class GooglePhotoAlbumManager {
     private Map<String, Album> albums = null;
 
     public static final int MAX_FREE_DIMENSION = 4608;
-
-    private record MediaWithName(String name, File file, String uploadToken) implements Comparable<MediaWithName> {
-        public MediaWithName(String name, File resizedFile) {
-            this(name, resizedFile, null);
-        }
-
-        @Override
-        public int compareTo(MediaWithName other) {
-            return this.name.compareTo(other.name);
-        }
-    }
 
     public GooglePhotoAlbumManager(GooglePhotosAPI googlePhotosAPI) {
         this.googlePhotosAPI = googlePhotosAPI;
@@ -135,24 +119,6 @@ public class GooglePhotoAlbumManager {
         return album;
     }
 
-    private record MediaTaskLog(Status status, int workerIndex, MediaWithName media) {
-
-        enum Status {
-            RESIZE_STARTED,
-            RESIZE_COMPLETED,
-            RESIZE_NOT_REQUIRED,
-            RESIZE_ALL_COMPLETED,
-            UPLOAD_STARTED,
-            UPLOAD_COMPLETED,
-            UPLOAD_FAILED,
-            UPLOAD_ALL_COMPLETED
-        }
-
-        MediaTaskLog(Status status, int workerIndex) {
-            this(status, workerIndex, null);
-        }
-    }
-
     public void batchUploadFiles(Album album, List<File> files) {
         logger.info("Album: {}", album.title());
         final Set<String> albumFileNames = this.skipAlbumLoad ? new HashSet<>()
@@ -176,52 +142,73 @@ public class GooglePhotoAlbumManager {
         ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue = new ConcurrentLinkedQueue<>(mediasToUpload);
         List<MediaWithName> mediasUploaded = Collections.synchronizedList(new ArrayList<>(numberOfMediasToUpload));
         BlockingQueue<MediaWithName> mediasToUploadQueue = new LinkedBlockingQueue<>(numberOfMediasToUpload);
-        ConcurrentLinkedQueue<MediaTaskLog> progressLog = new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<SyncStatusWatcher.MediaTaskLog> progressLog = new ConcurrentLinkedQueue<>();
+
+        Future<Void> watcherFuture = taskExecutor.submit(SyncStatusWatcher.getWatcherTask(album, mediasToUploadQueue,
+                mediasToResizeQueue, mediasUploaded, progressLog,
+                numberOfMediasToUpload));
 
         IntStream.range(0, numCores - 1)
                 .mapToObj(i -> getResizerTask(i, mediasToResizeQueue, mediasToUploadQueue, progressLog))
                 .forEach(taskExecutor::submit);
 
-        IntStream.range(0, 1)
-                .mapToObj(i -> getUploaderTask(i, numberOfMediasToUpload, mediasToUploadQueue, mediasUploaded,
-                        progressLog))
-                .forEach(taskExecutor::submit);
+        // Run uploader tasks and chain saver task after all uploads complete
+        CompletableFuture<?>[] uploaderFutures = IntStream.range(0, 1)
+                .mapToObj(i -> CompletableFuture.runAsync(() -> {
+                    try {
+                        getUploaderTask(i, numberOfMediasToUpload, mediasToUploadQueue, mediasUploaded, progressLog)
+                                .call();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }, taskExecutor))
+                .toArray(CompletableFuture[]::new);
 
-        taskExecutor.submit(getWatcherTask(mediasToUploadQueue, mediasToResizeQueue, mediasUploaded, progressLog,
-                numberOfMediasToUpload));
+        // Chain saver task to run after all uploaders complete
+        CompletableFuture<Void> uploadAndSaveFuture = CompletableFuture.allOf(uploaderFutures)
+                .thenRunAsync(() -> {
+                    try {
+                        getSaverTask(album, mediasUploaded, progressLog).call();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }, taskExecutor);
 
-        taskExecutor.shutdown();
         try {
-            taskExecutor.awaitTermination(1, TimeUnit.DAYS);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-
-        Collections.sort(mediasUploaded);
-
-        if (!mediasUploaded.isEmpty()) {
-            logger.info("Saving {} medias to album {}", mediasUploaded.size(), album.title());
-            googlePhotosAPI.saveToAlbum(album,
-                    mediasUploaded.stream()
-                            .map(MediaWithName::uploadToken)
-                            .collect(Collectors.toList()));
+            // Wait for both the upload/save chain and the watcher task to complete
+            uploadAndSaveFuture.get();
+            watcherFuture.get();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Error waiting for upload tasks", e);
+        } finally {
+            taskExecutor.shutdown();
+            try {
+                taskExecutor.awaitTermination(1, TimeUnit.DAYS);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
     private Callable<Void> getResizerTask(int index, ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue,
-            BlockingQueue<MediaWithName> mediasToUpload, ConcurrentLinkedQueue<MediaTaskLog> progressLog) {
+            BlockingQueue<MediaWithName> mediasToUpload,
+            ConcurrentLinkedQueue<SyncStatusWatcher.MediaTaskLog> progressLog) {
         return () -> {
             while (!mediasToResizeQueue.isEmpty()) {
                 MediaWithName mediaToResize = mediasToResizeQueue.poll();
                 if (mediaToResize != null) {
-                    progressLog.add(new MediaTaskLog(MediaTaskLog.Status.RESIZE_STARTED, index, mediaToResize));
-                    if (ImageUtils.isJPEG(mediaToResize.file)) {
-                        File resizedFile = ImageUtils.resizeJPGImage(mediaToResize.file, MAX_FREE_DIMENSION);
-                        mediaToResize = new MediaWithName(mediaToResize.name, resizedFile);
-                        progressLog.add(new MediaTaskLog(MediaTaskLog.Status.RESIZE_COMPLETED, index, mediaToResize));
+                    progressLog.add(new SyncStatusWatcher.MediaTaskLog(
+                            SyncStatusWatcher.MediaTaskLog.Status.RESIZE_STARTED, index, mediaToResize));
+                    if (ImageUtils.isJPEG(mediaToResize.file())) {
+                        File resizedFile = ImageUtils.resizeJPGImage(mediaToResize.file(), MAX_FREE_DIMENSION);
+                        mediaToResize = new MediaWithName(mediaToResize.name(), resizedFile);
+                        progressLog.add(new SyncStatusWatcher.MediaTaskLog(
+                                SyncStatusWatcher.MediaTaskLog.Status.RESIZE_COMPLETED, index, mediaToResize));
                     } else {
                         progressLog
-                                .add(new MediaTaskLog(MediaTaskLog.Status.RESIZE_NOT_REQUIRED, index, mediaToResize));
+                                .add(new SyncStatusWatcher.MediaTaskLog(
+                                        SyncStatusWatcher.MediaTaskLog.Status.RESIZE_NOT_REQUIRED, index,
+                                        mediaToResize));
                     }
                     try {
                         mediasToUpload.put(mediaToResize);
@@ -230,105 +217,66 @@ public class GooglePhotoAlbumManager {
                     }
                 }
             }
-            progressLog.add(new MediaTaskLog(MediaTaskLog.Status.RESIZE_ALL_COMPLETED, index));
+            progressLog.add(new SyncStatusWatcher.MediaTaskLog(
+                    SyncStatusWatcher.MediaTaskLog.Status.RESIZE_ALL_COMPLETED, index));
             return null;
         };
     }
 
     private Callable<Void> getUploaderTask(int index, int totalNumMedias,
             BlockingQueue<MediaWithName> mediasToUploadQueue, List<MediaWithName> mediasUploaded,
-            ConcurrentLinkedQueue<MediaTaskLog> progressLog) {
+            ConcurrentLinkedQueue<SyncStatusWatcher.MediaTaskLog> progressLog) {
         AtomicInteger numMediasToUpload = new AtomicInteger(totalNumMedias);
         return () -> {
             while (numMediasToUpload.getAndDecrement() > 0) {
                 try {
                     MediaWithName media = mediasToUploadQueue.take();
-                    progressLog.add(new MediaTaskLog(MediaTaskLog.Status.UPLOAD_STARTED, index, media));
-                    String newMediaToken = googlePhotosAPI.uploadSingleFile(media.name, media.file);
+                    progressLog.add(new SyncStatusWatcher.MediaTaskLog(
+                            SyncStatusWatcher.MediaTaskLog.Status.UPLOAD_STARTED, index, media));
+                    String newMediaToken = googlePhotosAPI.uploadSingleFile(media.name(), media.file());
                     if (newMediaToken != null) {
-                        progressLog.add(new MediaTaskLog(MediaTaskLog.Status.UPLOAD_COMPLETED, index, media));
-                        mediasUploaded.add(new MediaWithName(media.name, media.file, newMediaToken));
+                        progressLog.add(new SyncStatusWatcher.MediaTaskLog(
+                                SyncStatusWatcher.MediaTaskLog.Status.UPLOAD_COMPLETED, index, media));
+                        mediasUploaded.add(new MediaWithName(media.name(), media.file(), newMediaToken));
                     } else {
-                        progressLog.add(new MediaTaskLog(MediaTaskLog.Status.UPLOAD_FAILED, index, media));
+                        progressLog.add(new SyncStatusWatcher.MediaTaskLog(
+                                SyncStatusWatcher.MediaTaskLog.Status.UPLOAD_FAILED, index, media));
                     }
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
             }
-            progressLog.add(new MediaTaskLog(MediaTaskLog.Status.UPLOAD_ALL_COMPLETED, index));
+            progressLog.add(new SyncStatusWatcher.MediaTaskLog(
+                    SyncStatusWatcher.MediaTaskLog.Status.UPLOAD_ALL_COMPLETED, index));
             return null;
         };
     }
 
-    private Callable<Void> getWatcherTask(
-            BlockingQueue<MediaWithName> mediasToUploadQueue,
-            ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue,
+    private Callable<Void> getSaverTask(
+            Album album,
             List<MediaWithName> mediasUploaded,
-            ConcurrentLinkedQueue<MediaTaskLog> progressLog,
-            int totalMedias) {
+            ConcurrentLinkedQueue<SyncStatusWatcher.MediaTaskLog> progressLog) {
 
         return () -> {
-            try (ProgressBar pb = new ProgressBarBuilder()
-                    .setTaskName("Syncing")
-                    .setInitialMax(totalMedias)
-                    .setStyle(ProgressBarStyle.UNICODE_BLOCK)
-                    .setUpdateIntervalMillis(100)
-                    .build()) {
+            Collections.sort(mediasUploaded);
 
-                Map<String, ProgressBar> workerBars = new LinkedHashMap<>();
-                int completedUploads = 0;
+            if (!mediasUploaded.isEmpty()) {
+                progressLog.add(SyncStatusWatcher.MediaTaskLog
+                        .forSave(SyncStatusWatcher.MediaTaskLog.Status.SAVE_STARTED, mediasUploaded.size()));
 
-                while (completedUploads < totalMedias) {
-                    MediaTaskLog log = progressLog.poll();
-                    if (log != null) {
-                        String mediaName = (log.media() != null) ? log.media().name : "";
-                        String workerKey = (log.status().name().startsWith("RESIZE") ? "Resizing" : "Uploading")
-                                + log.workerIndex();
+                googlePhotosAPI.saveToAlbum(album,
+                        mediasUploaded.stream()
+                                .map(MediaWithName::uploadToken)
+                                .collect(Collectors.toList()));
 
-                        switch (log.status()) {
-                            case RESIZE_STARTED:
-                            case UPLOAD_STARTED:
-                                String taskLabel = (log.status() == MediaTaskLog.Status.RESIZE_STARTED) ? "Resizing"
-                                        : "Uploading";
-                                ProgressBar subBar = new ProgressBarBuilder()
-                                        .setTaskName(String.format("%-10s: %s", taskLabel, mediaName))
-                                        .setInitialMax(1)
-                                        .setStyle(ProgressBarStyle.UNICODE_BLOCK)
-                                        .build();
-                                workerBars.put(workerKey, subBar);
-                                break;
-
-                            case RESIZE_COMPLETED:
-                            case RESIZE_NOT_REQUIRED:
-                                ProgressBar rb = workerBars.remove(workerKey);
-                                if (rb != null) {
-                                    rb.stepTo(1);
-                                    rb.close();
-                                }
-                                break;
-
-                            case UPLOAD_COMPLETED:
-                            case UPLOAD_FAILED:
-                                ProgressBar ub = workerBars.remove(workerKey);
-                                if (ub != null) {
-                                    ub.stepTo(1);
-                                    ub.close();
-                                }
-                                completedUploads++;
-                                pb.step();
-                                break;
-
-                            default:
-                                break;
-                        }
-                    } else {
-                        Thread.sleep(50);
-                    }
-                }
-                pb.setExtraMessage("Completed!");
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                progressLog.add(SyncStatusWatcher.MediaTaskLog
+                        .forSave(SyncStatusWatcher.MediaTaskLog.Status.SAVE_COMPLETED, mediasUploaded.size()));
+            } else {
+                // No medias to save, signal completion immediately
+                progressLog.add(SyncStatusWatcher.MediaTaskLog
+                        .forSave(SyncStatusWatcher.MediaTaskLog.Status.SAVE_COMPLETED, 0));
             }
+
             return null;
         };
     }
@@ -336,7 +284,7 @@ public class GooglePhotoAlbumManager {
     private List<MediaWithName> getMediasToUpload(List<File> files, Set<String> albumFileNames) {
         return files.stream()
                 .map(file -> new MediaWithName(AlbumUtils.file2MediaName(file), file))
-                .filter(media -> !albumFileNames.contains(media.name))
+                .filter(media -> !albumFileNames.contains(media.name()))
                 .collect(Collectors.toList());
     }
 
