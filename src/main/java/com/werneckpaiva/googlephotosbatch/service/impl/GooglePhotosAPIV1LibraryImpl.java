@@ -55,11 +55,9 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
 
     private static final Logger logger = LoggerFactory.getLogger(GooglePhotosAPIV1LibraryImpl.class);
 
-    private static final List<String> REQUIRED_SCOPES =
-            ImmutableList.of(
-                    "https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata",
-                    "https://www.googleapis.com/auth/photoslibrary.appendonly");
-
+    private static final List<String> REQUIRED_SCOPES = ImmutableList.of(
+            "https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata",
+            "https://www.googleapis.com/auth/photoslibrary.appendonly");
 
     public GooglePhotosAPIV1LibraryImpl(PhotosLibraryClient photosLibraryClient) {
         this.photosLibraryClient = photosLibraryClient;
@@ -69,7 +67,8 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
         this.photosLibraryClient = GooglePhotosAPIV1LibraryImpl.createPhotosLibraryClient(credentialsURL);
     }
 
-    private static PhotosLibraryClient createPhotosLibraryClient(URL credentialsURL) throws GooglePhotosServiceException {
+    private static PhotosLibraryClient createPhotosLibraryClient(URL credentialsURL)
+            throws GooglePhotosServiceException {
         PhotosLibrarySettings settings = null;
         try {
             Credentials credentials = GooglePhotosAPIV1LibraryImpl.loadUserCredentials(credentialsURL);
@@ -111,28 +110,24 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
         folder.delete();
     }
 
-
     private static Credentials loadUserCredentials(URL credentialsURL) throws IOException, GeneralSecurityException {
         InputStream credentialsInputStream = credentialsURL.openStream();
         assert credentialsInputStream != null;
-        GoogleClientSecrets clientSecrets =
-                GoogleClientSecrets.load(JSON_FACTORY,
-                        new InputStreamReader(credentialsInputStream));
+        GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JSON_FACTORY,
+                new InputStreamReader(credentialsInputStream));
         String clientId = clientSecrets.getDetails().getClientId();
         String clientSecret = clientSecrets.getDetails().getClientSecret();
 
         FileDataStoreFactory credentialsDataStore = new FileDataStoreFactory(CREDENTIALS_DATA_FILE);
-        GoogleAuthorizationCodeFlow flow =
-                new GoogleAuthorizationCodeFlow.Builder(
-                        GoogleNetHttpTransport.newTrustedTransport(),
-                        JSON_FACTORY,
-                        clientSecrets,
-                        REQUIRED_SCOPES)
-                        .setDataStoreFactory(credentialsDataStore)
-                        .setAccessType("offline")
-                        .build();
-        LocalServerReceiver receiver =
-                new LocalServerReceiver.Builder().build();
+        GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
+                GoogleNetHttpTransport.newTrustedTransport(),
+                JSON_FACTORY,
+                clientSecrets,
+                REQUIRED_SCOPES)
+                .setDataStoreFactory(credentialsDataStore)
+                .setAccessType("offline")
+                .build();
+        LocalServerReceiver receiver = new LocalServerReceiver.Builder().build();
         Credential credential = new AuthorizationCodeInstalledApp(flow, receiver).authorize("user");
         return UserCredentials.newBuilder()
                 .setClientId(clientId)
@@ -145,12 +140,13 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
         byte retry = 0;
         while (retry++ < 100) {
             try {
-                InternalPhotosLibraryClient.SearchMediaItemsPagedResponse response = photosLibraryClient.searchMediaItems(album.id());
+                InternalPhotosLibraryClient.SearchMediaItemsPagedResponse response = photosLibraryClient
+                        .searchMediaItems(album.id());
                 return StreamSupport.stream(response.iterateAll().spliterator(), false)
                         .map(MediaItem::getFilename)
                         .collect(Collectors.toSet());
             } catch (RuntimeException e) {
-                System.out.println("Error: " + e.getMessage() + " retry " + retry);
+                logger.error("Error: {} retry {}", e.getMessage(), retry);
             }
         }
         throw new RuntimeException("Couldn't retrieve medias from album " + album.title());
@@ -159,11 +155,10 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
     public String uploadSingleFile(String mediaName, File file) {
         logger.info("Uploading {}", mediaName);
         try {
-            UploadMediaItemRequest uploadRequest =
-                    UploadMediaItemRequest.newBuilder()
-                            .setFileName(mediaName)
-                            .setDataFile(new RandomAccessFile(file, "r"))
-                            .build();
+            UploadMediaItemRequest uploadRequest = UploadMediaItemRequest.newBuilder()
+                    .setFileName(mediaName)
+                    .setDataFile(new RandomAccessFile(file, "r"))
+                    .build();
             UploadMediaItemResponse uploadResponse = photosLibraryClient.uploadMediaItem(uploadRequest);
             if (uploadResponse.getError().isPresent()) {
                 UploadMediaItemResponse.Error error = uploadResponse.getError().get();
@@ -191,7 +186,7 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                     Thread.sleep(30000);
                 }
             } catch (InterruptedException ex) {
-                System.out.println("Retry waiting interrupted");
+                logger.error("Retry waiting interrupted");
                 throw new RuntimeException(ex);
             }
         }
@@ -199,19 +194,21 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
     }
 
     public void saveToAlbum(Album album, List<String> uploadedTokens) {
-        if (uploadedTokens.isEmpty()) return;
+        if (uploadedTokens.isEmpty())
+            return;
         for (int i = 0; i <= uploadedTokens.size() / ALBUM_BATCH_SIZE; i++) {
             int fromIndex = i * ALBUM_BATCH_SIZE;
-            if (fromIndex >= uploadedTokens.size()) return;
+            if (fromIndex >= uploadedTokens.size())
+                return;
             int toIndex = Math.min((i + 1) * ALBUM_BATCH_SIZE, uploadedTokens.size());
-            System.out.printf("From %d to %d\n", fromIndex, toIndex);
             saveToAlbumInIdealBatchSize(album, uploadedTokens.subList(fromIndex, toIndex));
         }
     }
 
     private void saveToAlbumInIdealBatchSize(Album album, List<String> uploadedTokens) {
         int retries = 0;
-        List<NewMediaItem> mediasUploaded = uploadedTokens.stream().map(token -> NewMediaItemFactory.createNewMediaItem(token)).collect(Collectors.toList());
+        List<NewMediaItem> mediasUploaded = uploadedTokens.stream()
+                .map(token -> NewMediaItemFactory.createNewMediaItem(token)).collect(Collectors.toList());
         while (retries++ < 3) {
             try {
                 try {
@@ -219,10 +216,12 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                             .setAlbumId(album.id())
                             .addAllNewMediaItems(mediasUploaded)
                             .build();
-                    ApiFuture<BatchCreateMediaItemsResponse> apiFuture = photosLibraryClient.batchCreateMediaItemsCallable()
+                    ApiFuture<BatchCreateMediaItemsResponse> apiFuture = photosLibraryClient
+                            .batchCreateMediaItemsCallable()
                             .futureCall(albumMediaItemsRequest);
                     BatchCreateMediaItemsResponse mediasToAlbumResponse = apiFuture.get();
-                    List<NewMediaItemResult> newMediaItemResultsList = mediasToAlbumResponse.getNewMediaItemResultsList();
+                    List<NewMediaItemResult> newMediaItemResultsList = mediasToAlbumResponse
+                            .getNewMediaItemResultsList();
                     for (NewMediaItemResult itemsResponse : newMediaItemResultsList) {
                         Status status = itemsResponse.getStatus();
                         if (status.getCode() != Code.OK_VALUE) {
@@ -235,9 +234,19 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                     Thread.sleep(30000);
                 }
             } catch (InterruptedException ex) {
-                System.out.println("Retry waiting interrupted");
+                logger.error("Retry waiting interrupted");
                 return;
             }
+        }
+    }
+
+    public Album getAlbum(String albumId) {
+        try {
+            com.google.photos.types.proto.Album googleAlbum = photosLibraryClient.getAlbum(albumId);
+            return googleAlbum2Album(googleAlbum);
+        } catch (ApiException e) {
+            logger.error("Error getting album with ID {}", albumId, e);
+            return null;
         }
     }
 
@@ -246,7 +255,8 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                 .setExcludeNonAppCreatedData(false)
                 .setPageSize(50)
                 .build();
-        InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = photosLibraryClient.listAlbums(listAlbumsRequest);
+        InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = photosLibraryClient
+                .listAlbums(listAlbumsRequest);
         Iterable<com.google.photos.types.proto.Album> albumsIterable = listAlbumsResponse.iterateAll();
         return () -> {
             Iterator<com.google.photos.types.proto.Album> iterator = albumsIterable.iterator();

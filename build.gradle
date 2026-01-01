@@ -29,6 +29,8 @@ dependencies {
     implementation 'org.slf4j:slf4j-api:2.0.16'
     implementation 'ch.qos.logback:logback-classic:1.5.18'
     implementation 'org.fusesource.jansi:jansi:2.4.1'
+    implementation 'me.tongfei:progressbar:0.10.1'
+    implementation 'info.picocli:picocli:4.7.6'
 
     implementation platform('com.google.cloud:libraries-bom:26.60.0')
 

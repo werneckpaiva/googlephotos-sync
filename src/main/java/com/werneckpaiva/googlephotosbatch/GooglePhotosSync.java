@@ -9,56 +9,86 @@ import com.werneckpaiva.googlephotosbatch.utils.AlbumUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.fusesource.jansi.AnsiConsole;
+import picocli.CommandLine;
+
 import java.io.File;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
 
-public class GooglePhotosSync {
+@CommandLine.Command(name = "googlephotos-sync", mixinStandardHelpOptions = true, version = "1.0", description = "Syncs local folders to Google Photos albums.")
+public class GooglePhotosSync implements Callable<Integer> {
 
-    private static final Pattern ALLOWED_FILES_PATTERN = Pattern.compile("\\.(jpe?g|mp4|mov)$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ALLOWED_FILES_PATTERN = Pattern.compile("\\.(jpe?g|mp4|mov)$",
+            Pattern.CASE_INSENSITIVE);
 
     private static final Logger logger = LoggerFactory.getLogger(GooglePhotosSync.class);
     private static final String CREDENTIALS_JSON = "credentials.json";
 
-    public static void main(String[] args){
+    @CommandLine.Parameters(index = "0", description = "Base folder to calculate album names")
+    private String baseFolder;
 
-        if (args.length == 0){
-            System.out.println("Usage: <base_folder> [folders...]");
-            System.exit(1);
+    @CommandLine.Parameters(index = "1..*", description = "Folders to process (optional, defaults to base folder)", defaultValue = "")
+    private List<String> foldersToProcess = new ArrayList<>();
+
+    @CommandLine.Option(names = {
+            "--skip-load" }, description = "Skip loading existing albums and create new ones if needed")
+    private boolean skipLoad = false;
+
+    @CommandLine.Option(names = {
+            "--album-id" }, description = "ID of the album to add photos to. Automatically sets --skip-load")
+    private String albumId;
+
+    public static void main(String[] args) {
+        System.setProperty("io.netty.noUnsafe", "true");
+        System.setProperty("io.grpc.netty.shaded.io.netty.noUnsafe", "true");
+        System.setProperty("guava.concurrent.allow_unsafe", "false");
+        AnsiConsole.systemInstall();
+
+        int exitCode = new CommandLine(new GooglePhotosSync()).execute(args);
+        System.exit(exitCode);
+    }
+
+    @Override
+    public Integer call() {
+        if (albumId != null) {
+            skipLoad = true;
         }
-        String baseFolder = args[0];
-        List<String> foldersToProcess = new ArrayList<>();
-        if (args.length >= 2){
-            for (int i=1; i<args.length; i++){
-                String processFolder = args[i];
-                if (!processFolder.startsWith(baseFolder)){
-                    System.err.println("Processing folder must be included in the base folder");
-                    System.exit(1);
-                }
-                foldersToProcess.add(processFolder);
-            }
-        } else {
+        if (foldersToProcess.isEmpty()) {
             foldersToProcess.add(baseFolder);
         }
+        for (String processFolder : foldersToProcess) {
+            if (!processFolder.startsWith(baseFolder)) {
+                System.err.println("Processing folder must be included in the base folder: " + processFolder);
+                return 1;
+            }
+        }
 
-        GooglePhotosSync googlePhotosSync = new GooglePhotosSync();
         try {
-            googlePhotosSync.run(baseFolder, foldersToProcess);
+            run(baseFolder, foldersToProcess, skipLoad, albumId);
+            return 0;
         } catch (Exception e) {
             logger.error("Error running GooglePhotosSync", e);
+            return 1;
         }
     }
 
-    public void run(String baseFolder, List<String> foldersToProcess) throws GooglePhotosServiceException {
+    public void run(String baseFolder, List<String> foldersToProcess, boolean skipLoad, String albumId)
+            throws GooglePhotosServiceException {
         URL credentialsURL = getClass().getClassLoader().getResource(CREDENTIALS_JSON);
 
         GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(credentialsURL);
         GooglePhotoAlbumManager googlePhotosAlbums = new GooglePhotoAlbumManager(googlePhotoService);
+        googlePhotosAlbums.setSkipAlbumLoad(skipLoad);
+        if (albumId != null) {
+            googlePhotosAlbums.setAlbumId(albumId);
+        }
 
-        for(String folderToProcess : foldersToProcess){
+        for (String folderToProcess : foldersToProcess) {
             File folderFile = new File(folderToProcess);
             if (!folderFile.exists()) {
                 continue;
@@ -81,27 +111,29 @@ public class GooglePhotosSync {
 
     }
 
-    private void uploadFoldersRecursively(GooglePhotoAlbumManager googlePhotoAlbumManager, String baseFolder, File path) throws PermissionDeniedToLoadAlbumsException {
+    private void uploadFoldersRecursively(GooglePhotoAlbumManager googlePhotoAlbumManager, String baseFolder, File path)
+            throws PermissionDeniedToLoadAlbumsException {
         List<File> files = new ArrayList<>();
         List<File> dirs = new ArrayList<>();
-        for (File file : Objects.requireNonNull(path.listFiles())){
+        for (File file : Objects.requireNonNull(path.listFiles())) {
             String fileName = file.getName();
-            if (fileName.startsWith(".")) continue;
-            if (file.isDirectory()){
+            if (fileName.startsWith("."))
+                continue;
+            if (file.isDirectory()) {
                 dirs.add(file);
-            } else if (ALLOWED_FILES_PATTERN.matcher(fileName).find()){
+            } else if (ALLOWED_FILES_PATTERN.matcher(fileName).find()) {
                 files.add(file);
             }
         }
-        if (!files.isEmpty()){
+        if (!files.isEmpty()) {
             String albumName = AlbumUtils.file2AlbumName(baseFolder, path);
             Album album = googlePhotoAlbumManager.getAlbum(albumName);
-            if (album == null){
+            if (album == null) {
                 album = googlePhotoAlbumManager.createAlbum(albumName);
             }
             googlePhotoAlbumManager.batchUploadFiles(album, files);
         }
-        for (File dir : dirs){
+        for (File dir : dirs) {
             uploadFoldersRecursively(googlePhotoAlbumManager, baseFolder, dir);
         }
     }

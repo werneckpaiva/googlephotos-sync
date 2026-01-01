@@ -1,6 +1,5 @@
 package com.werneckpaiva.googlephotosbatch;
 
-
 import com.google.api.core.ApiFuture;
 import com.google.photos.library.v1.PhotosLibraryClient;
 
@@ -30,13 +29,13 @@ import java.util.concurrent.ExecutionException;
 
 import com.google.api.gax.rpc.UnaryCallable;
 
-
 public class TestGooglePhotoAlbumManager {
 
     @Test
     public void testListAlbumsEmptyList() throws PermissionDeniedToLoadAlbumsException {
         // Setup
-        InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = mock(InternalPhotosLibraryClient.ListAlbumsPagedResponse.class);
+        InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = mock(
+                InternalPhotosLibraryClient.ListAlbumsPagedResponse.class);
         PhotosLibraryClient photosLibraryClient = mock(PhotosLibraryClient.class);
         when(photosLibraryClient.listAlbums(any(ListAlbumsRequest.class))).thenReturn(listAlbumsResponse);
         GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(photosLibraryClient);
@@ -48,10 +47,61 @@ public class TestGooglePhotoAlbumManager {
     }
 
     @Test
+    public void testGetAlbumWithAlbumId() throws PermissionDeniedToLoadAlbumsException {
+        // Setup
+        GooglePhotosAPI googlePhotoService = mock(GooglePhotosAPI.class);
+        Album expectedAlbum = new Album("My Album", "123", true);
+        when(googlePhotoService.getAlbum("123")).thenReturn(expectedAlbum);
+
+        GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
+        googlePhotoAlbumManager.setAlbumId("123");
+
+        // Execute
+        Album album = googlePhotoAlbumManager.getAlbum("Any Album");
+
+        // Verify
+        Assertions.assertEquals(expectedAlbum, album);
+        verify(googlePhotoService, times(1)).getAlbum("123");
+        verify(googlePhotoService, never()).getAllAlbums();
+    }
+
+    @Test
+    public void testGetAlbumWithSkipLoad() throws PermissionDeniedToLoadAlbumsException {
+        // Setup
+        GooglePhotosAPI googlePhotoService = mock(GooglePhotosAPI.class);
+        GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
+        googlePhotoAlbumManager.setSkipAlbumLoad(true);
+
+        // Execute
+        Album album = googlePhotoAlbumManager.getAlbum("Any Album");
+
+        // Verify
+        Assertions.assertNull(album);
+        verify(googlePhotoService, never()).getAllAlbums();
+    }
+
+    @Test
+    public void testBatchUploadWithSkipLoad() throws PermissionDeniedToLoadAlbumsException {
+        // Setup
+        GooglePhotosAPI googlePhotoService = mock(GooglePhotosAPI.class);
+        GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
+        googlePhotoAlbumManager.setSkipAlbumLoad(true);
+        Album album = new Album("My Album", "123", true);
+        List<File> files = Arrays.asList(new File("image1.jpg"));
+
+        // Execute
+        googlePhotoAlbumManager.batchUploadFiles(album, files);
+
+        // Verify
+        verify(googlePhotoService, never()).retrieveFilesFromAlbum(any());
+    }
+
+    @Test
     @Disabled
     public void testListAlbumsNonEmpty() throws PermissionDeniedToLoadAlbumsException {
         // Setup
-        InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = mock(InternalPhotosLibraryClient.ListAlbumsPagedResponse.class);
+        InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = mock(
+                InternalPhotosLibraryClient.ListAlbumsPagedResponse.class);
         List<com.google.photos.types.proto.Album> albums = Arrays.asList(
                 mock(com.google.photos.types.proto.Album.class),
                 mock(com.google.photos.types.proto.Album.class),
@@ -82,8 +132,7 @@ public class TestGooglePhotoAlbumManager {
         Album album = new Album("My Album", albumId, true);
 
         List<File> files = Arrays.asList(
-                getImageFile("photo_portrait_small.JPG")
-        );
+                getImageFile("photo_portrait_small.JPG"));
 
         // Execute
         GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
@@ -103,8 +152,7 @@ public class TestGooglePhotoAlbumManager {
         List<File> files = Arrays.asList(
                 getImageFile("photo_landscape_big.JPG"),
                 getImageFile("photo_portrait_big.JPG"),
-                getImageFile("photo_portrait_small.JPG")
-        );
+                getImageFile("photo_portrait_small.JPG"));
 
         // Execute
         GooglePhotoAlbumManager googlePhotoAlbumManager = new GooglePhotoAlbumManager(googlePhotoService);
@@ -113,8 +161,10 @@ public class TestGooglePhotoAlbumManager {
         verify(photosLibraryClient, times(3)).uploadMediaItem(any());
     }
 
-    private static PhotosLibraryClient mockPhotosLibraryClient(String albumId) throws InterruptedException, ExecutionException {
-        InternalPhotosLibraryClient.SearchMediaItemsPagedResponse responseEmptyAlbum = mock(InternalPhotosLibraryClient.SearchMediaItemsPagedResponse.class);
+    private static PhotosLibraryClient mockPhotosLibraryClient(String albumId)
+            throws InterruptedException, ExecutionException {
+        InternalPhotosLibraryClient.SearchMediaItemsPagedResponse responseEmptyAlbum = mock(
+                InternalPhotosLibraryClient.SearchMediaItemsPagedResponse.class);
         UploadMediaItemResponse uploadResponse = mock(UploadMediaItemResponse.class);
         when(uploadResponse.getUploadToken()).thenReturn(Optional.of("token"));
 

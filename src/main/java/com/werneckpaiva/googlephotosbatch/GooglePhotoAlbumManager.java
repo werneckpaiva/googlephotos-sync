@@ -19,6 +19,9 @@ import org.fusesource.jansi.Ansi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import me.tongfei.progressbar.ProgressBar;
+import me.tongfei.progressbar.ProgressBarBuilder;
+import me.tongfei.progressbar.ProgressBarStyle;
 
 /**
  * Manages Google Photo Albums
@@ -67,7 +70,7 @@ public class GooglePhotoAlbumManager {
                         fw.write("\", \"id\": \"");
                         fw.write(album.id());
                         fw.write("\", \"isWritable\": ");
-                        fw.write(album.isWriteable()?"true":"false");
+                        fw.write(album.isWriteable() ? "true" : "false");
                         fw.write("}\n");
 
                         if (i++ % 100 == 0) {
@@ -92,21 +95,47 @@ public class GooglePhotoAlbumManager {
 
     }
 
+    private boolean skipAlbumLoad = false;
+
+    private String albumId = null;
+
+    public void setSkipAlbumLoad(boolean skipAlbumLoad) {
+        this.skipAlbumLoad = skipAlbumLoad;
+    }
+
+    public void setAlbumId(String albumId) {
+        this.albumId = albumId;
+    }
+
     public Album getAlbum(String albumName) throws PermissionDeniedToLoadAlbumsException {
+        if (this.albumId != null) {
+            Album album = googlePhotosAPI.getAlbum(this.albumId);
+            if (this.albums == null) {
+                this.albums = new HashMap<>();
+            }
+            if (album != null) {
+                this.albums.put(albumName, album);
+            }
+            return album;
+        }
         if (this.albums == null) {
-            this.albums = listAllAlbums();
+            if (this.skipAlbumLoad) {
+                this.albums = new HashMap<>();
+            } else {
+                this.albums = listAllAlbums();
+            }
         }
         return this.albums.get(albumName);
     }
 
     public Album createAlbum(String albumName) {
-        logger.info("Creating Fake album {}", albumName);
+        logger.info("Creating new album {}", albumName);
         Album album = googlePhotosAPI.createAlbum(albumName);
         this.albums.put(albumName, album);
         return album;
     }
 
-    private record MediaTaskLog(Status status, int workerIndex, MediaWithName media){
+    private record MediaTaskLog(Status status, int workerIndex, MediaWithName media) {
 
         enum Status {
             RESIZE_STARTED,
@@ -125,12 +154,14 @@ public class GooglePhotoAlbumManager {
 
     public void batchUploadFiles(Album album, List<File> files) {
         logger.info("Album: {}", album.title());
-        final Set<String> albumFileNames = googlePhotosAPI.retrieveFilesFromAlbum(album);
+        final Set<String> albumFileNames = this.skipAlbumLoad ? new HashSet<>()
+                : googlePhotosAPI.retrieveFilesFromAlbum(album);
 
         List<MediaWithName> mediasToUpload = this.getMediasToUpload(files, albumFileNames);
 
         int numberOfMediasToUpload = mediasToUpload.size();
-        if (numberOfMediasToUpload == 0) return;
+        if (numberOfMediasToUpload == 0)
+            return;
 
         if (!album.isWriteable()) {
             logger.error("Album is not writable");
@@ -151,10 +182,12 @@ public class GooglePhotoAlbumManager {
                 .forEach(taskExecutor::submit);
 
         IntStream.range(0, 1)
-                .mapToObj(i -> getUploaderTask(i, numberOfMediasToUpload, mediasToUploadQueue, mediasUploaded, progressLog))
+                .mapToObj(i -> getUploaderTask(i, numberOfMediasToUpload, mediasToUploadQueue, mediasUploaded,
+                        progressLog))
                 .forEach(taskExecutor::submit);
 
-        taskExecutor.submit(getWatcherTask(mediasToUploadQueue, mediasToResizeQueue, mediasUploaded, progressLog));
+        taskExecutor.submit(getWatcherTask(mediasToUploadQueue, mediasToResizeQueue, mediasUploaded, progressLog,
+                numberOfMediasToUpload));
 
         taskExecutor.shutdown();
         try {
@@ -174,7 +207,8 @@ public class GooglePhotoAlbumManager {
         }
     }
 
-    private Callable<Void> getResizerTask(int index, ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue, BlockingQueue<MediaWithName> mediasToUpload, ConcurrentLinkedQueue<MediaTaskLog> progressLog) {
+    private Callable<Void> getResizerTask(int index, ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue,
+            BlockingQueue<MediaWithName> mediasToUpload, ConcurrentLinkedQueue<MediaTaskLog> progressLog) {
         return () -> {
             while (!mediasToResizeQueue.isEmpty()) {
                 MediaWithName mediaToResize = mediasToResizeQueue.poll();
@@ -185,7 +219,8 @@ public class GooglePhotoAlbumManager {
                         mediaToResize = new MediaWithName(mediaToResize.name, resizedFile);
                         progressLog.add(new MediaTaskLog(MediaTaskLog.Status.RESIZE_COMPLETED, index, mediaToResize));
                     } else {
-                        progressLog.add(new MediaTaskLog(MediaTaskLog.Status.RESIZE_NOT_REQUIRED, index, mediaToResize));
+                        progressLog
+                                .add(new MediaTaskLog(MediaTaskLog.Status.RESIZE_NOT_REQUIRED, index, mediaToResize));
                     }
                     try {
                         mediasToUpload.put(mediaToResize);
@@ -199,7 +234,9 @@ public class GooglePhotoAlbumManager {
         };
     }
 
-    private Callable<Void> getUploaderTask(int index, int totalNumMedias, BlockingQueue<MediaWithName> mediasToUploadQueue, List<MediaWithName> mediasUploaded, ConcurrentLinkedQueue<MediaTaskLog> progressLog) {
+    private Callable<Void> getUploaderTask(int index, int totalNumMedias,
+            BlockingQueue<MediaWithName> mediasToUploadQueue, List<MediaWithName> mediasUploaded,
+            ConcurrentLinkedQueue<MediaTaskLog> progressLog) {
         AtomicInteger numMediasToUpload = new AtomicInteger(totalNumMedias);
         return () -> {
             while (numMediasToUpload.getAndDecrement() > 0) {
@@ -224,123 +261,70 @@ public class GooglePhotoAlbumManager {
             BlockingQueue<MediaWithName> mediasToUploadQueue,
             ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue,
             List<MediaWithName> mediasUploaded,
-            ConcurrentLinkedQueue<MediaTaskLog> progressLog) {
+            ConcurrentLinkedQueue<MediaTaskLog> progressLog,
+            int totalMedias) {
 
         return () -> {
-            final int BAR_LENGTH = 50;
-            final String progressBar = String.valueOf('-').repeat(BAR_LENGTH);
-            final String progressBarPrefix = "Progress: [";
-            final String progressBarSuffix = "]";
-            Ansi ansi = Ansi.ansi()
-                    .cursorToColumn(0)
-                    .reset()
-                    .a(progressBarPrefix)
-                    .a(progressBar)
-                    .a(progressBarSuffix)
-                    .reset();
-            int numResizingTasks = 0;
-            int numUploadingTasks = 0;
-            int totalMedias = mediasToUploadQueue.size() + mediasToResizeQueue.size() + mediasUploaded.size();
-            long startTime = System.currentTimeMillis();
-            while (!mediasToResizeQueue.isEmpty() || !mediasToUploadQueue.isEmpty()) {
-                try {
-                    int uploadedCount = mediasUploaded.size();
-                    int progress = (int) ((double) uploadedCount / totalMedias * 100);
-                    int filledLength = (int) ((double) progress / 100 * BAR_LENGTH);
-                    long elapsedTime = System.currentTimeMillis() - startTime;
-                    logger.debug("Progress: uploaded: {}, total: {}", uploadedCount, totalMedias);
-                    ansi = ansi
-                            .cursorToColumn(progressBarPrefix.length() + filledLength + 1)
-                            .fg(Ansi.Color.GREEN).a("=")
-                            .reset()
-                            .cursorToColumn(progressBarPrefix.length() + progressBar.length() + progressBarSuffix.length() + 1)
-                            .a(String.format(" %3d%% (%d/%d)", progress, uploadedCount, totalMedias));
-                    if (uploadedCount > 3) {
-                        double uploadRate = (double) uploadedCount / elapsedTime; // medias per millisecond
-                        long remainingMedias = totalMedias - uploadedCount;
-                        long estimatedTimeRemaining = (long) (remainingMedias / uploadRate); // milliseconds
+            try (ProgressBar pb = new ProgressBarBuilder()
+                    .setTaskName("Syncing")
+                    .setInitialMax(totalMedias)
+                    .setStyle(ProgressBarStyle.UNICODE_BLOCK)
+                    .setUpdateIntervalMillis(100)
+                    .build()) {
 
-                        long hours = TimeUnit.MILLISECONDS.toHours(estimatedTimeRemaining);
-                        long minutes = TimeUnit.MILLISECONDS.toMinutes(estimatedTimeRemaining) % 60;
-                        long seconds = TimeUnit.MILLISECONDS.toSeconds(estimatedTimeRemaining) % 60;
-                        ansi = ansi.a(String.format(" ETA: %02d:%02d:%02d", hours, minutes, seconds));
-                    }
-                    MediaTaskLog mediaTaskLog=progressLog.poll();
-                    if (mediaTaskLog != null) {
-                        switch (mediaTaskLog.status()){
+                Map<String, ProgressBar> workerBars = new LinkedHashMap<>();
+                int completedUploads = 0;
+
+                while (completedUploads < totalMedias) {
+                    MediaTaskLog log = progressLog.poll();
+                    if (log != null) {
+                        String mediaName = (log.media() != null) ? log.media().name : "";
+                        String workerKey = (log.status().name().startsWith("RESIZE") ? "Resizing" : "Uploading")
+                                + log.workerIndex();
+
+                        switch (log.status()) {
                             case RESIZE_STARTED:
-                                ansi = ansi.cursorDown(mediaTaskLog.workerIndex() + 1)
-                                        .cursorToColumn(0)
-                                        .eraseLine(Ansi.Erase.ALL)
-                                        .a("> RESIZE: " + mediaTaskLog.media().name)
-                                        .cursorUp(mediaTaskLog.workerIndex() + 1);
-                                numResizingTasks = Math.max(numResizingTasks, mediaTaskLog.workerIndex() + 1);
-                                break;
-                            case RESIZE_COMPLETED:
-                                ansi = ansi.cursorDown(mediaTaskLog.workerIndex() + 1)
-                                        .cursorToColumn(0)
-                                        .eraseLine(Ansi.Erase.ALL)
-                                        .a("> RESIZE: " + mediaTaskLog.media().name + " completed")
-                                        .cursorUp(mediaTaskLog.workerIndex() + 1);
-                                numResizingTasks = Math.max(numResizingTasks, mediaTaskLog.workerIndex() + 1);
-                                break;
-                            case RESIZE_NOT_REQUIRED:
-                                ansi = ansi.cursorDown(mediaTaskLog.workerIndex() + 1)
-                                        .cursorToColumn(0)
-                                        .eraseLine(Ansi.Erase.ALL)
-                                        .a("> RESIZE: " + mediaTaskLog.media().name + " not required")
-                                        .cursorUp(mediaTaskLog.workerIndex() + 1);
-                                numResizingTasks = Math.max(numResizingTasks, mediaTaskLog.workerIndex() + 1);
-                                break;
-                            case RESIZE_ALL_COMPLETED:
-                                ansi = ansi.cursorDown(mediaTaskLog.workerIndex() + 1)
-                                        .eraseLine(Ansi.Erase.ALL);
-                                numResizingTasks--;
-                                break;
                             case UPLOAD_STARTED:
-                                ansi = ansi.cursorDown(mediaTaskLog.workerIndex() + numResizingTasks + 1)
-                                        .cursorToColumn(0)
-                                        .eraseLine(Ansi.Erase.ALL)
-                                        .a("> UPLOAD: " + mediaTaskLog.media().name)
-                                        .cursorUp(mediaTaskLog.workerIndex() + numResizingTasks + 1);
-                                numUploadingTasks = Math.max(numUploadingTasks, mediaTaskLog.workerIndex() + 1);
+                                String taskLabel = (log.status() == MediaTaskLog.Status.RESIZE_STARTED) ? "Resizing"
+                                        : "Uploading";
+                                ProgressBar subBar = new ProgressBarBuilder()
+                                        .setTaskName(String.format("%-10s: %s", taskLabel, mediaName))
+                                        .setInitialMax(1)
+                                        .setStyle(ProgressBarStyle.UNICODE_BLOCK)
+                                        .build();
+                                workerBars.put(workerKey, subBar);
                                 break;
+
+                            case RESIZE_COMPLETED:
+                            case RESIZE_NOT_REQUIRED:
+                                ProgressBar rb = workerBars.remove(workerKey);
+                                if (rb != null) {
+                                    rb.stepTo(1);
+                                    rb.close();
+                                }
+                                break;
+
                             case UPLOAD_COMPLETED:
-                                ansi = ansi.cursorDown(mediaTaskLog.workerIndex() + numResizingTasks + 1)
-                                        .cursorToColumn(0)
-                                        .eraseLine(Ansi.Erase.ALL)
-                                        .a("> UPLOAD " + mediaTaskLog.media().name + " completed")
-                                        .cursorUp(mediaTaskLog.workerIndex() + numResizingTasks + 1);
-                                numUploadingTasks = Math.max(numUploadingTasks, mediaTaskLog.workerIndex() + 1);
+                                ProgressBar ub = workerBars.remove(workerKey);
+                                if (ub != null) {
+                                    ub.stepTo(1);
+                                    ub.close();
+                                }
+                                completedUploads++;
+                                pb.step();
                                 break;
-                            case UPLOAD_ALL_COMPLETED:
-                                ansi = ansi.cursorDown(mediaTaskLog.workerIndex() + numResizingTasks )
-                                        .eraseLine(Ansi.Erase.ALL);
-                                numUploadingTasks--;
+
+                            default:
                                 break;
                         }
+                    } else {
+                        Thread.sleep(50);
                     }
-//                    int newNumTasks = numResizingTasks + numUploadingTasks;
-//                    if (numTasks < newNumTasks){
-//                        IntStream.of(newNumTasks - numTasks).forEach(System.out::println);
-//                        numTasks = newNumTasks;
-//                    }
-                    System.out.println(ansi);
-                    if (mediaTaskLog == null) Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
                 }
-                ansi = Ansi.ansi();
+                pb.setExtraMessage("Completed!");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-            // Final success message using the same builder pattern
-            Ansi completionMessage = Ansi.ansi()
-                    .cursorToColumn(1)
-                    .eraseLine(Ansi.Erase.ALL)
-                    .fg(Ansi.Color.GREEN)
-                    .a("🎉 All tasks complete! (" + mediasUploaded.size() + " uploaded) 🎉")
-                    .reset();
-            System.out.println(completionMessage);
             return null;
         };
     }
