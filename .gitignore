@@ -2,9 +2,6 @@
 credentials.json
 credentials
 build/*
-gradle/
-gradlew
-gradlew.bat
 out/
 logs/
 *.log
