@@ -1,5 +1,7 @@
 package com.werneckpaiva.googlephotosbatch;
 
+import com.google.api.gax.rpc.PermissionDeniedException;
+import com.google.api.gax.rpc.UnauthenticatedException;
 import com.werneckpaiva.googlephotosbatch.exception.PermissionDeniedToLoadAlbumsException;
 import com.werneckpaiva.googlephotosbatch.service.Album;
 import com.werneckpaiva.googlephotosbatch.service.GooglePhotosAPI;
@@ -53,25 +55,39 @@ public class GooglePhotoAlbumManager {
 
         long startTime = System.currentTimeMillis();
         Map<String, Album> allAlbums = new HashMap<>();
-//        byte retry = 0;
-//        while (retry++ < 100) {
-//            try {
-//                int i = 1;
-//                for (Album album : googlePhotosAPI.getAllAlbums()) {
-//                    if (i++ % 100 == 0) {
-//                        System.out.print(".");
-//                    }
-//                    allAlbums.put(album.title(), album);
-//                }
-//                break;
-//            } catch (PermissionDeniedException e) {
-//                throw new PermissionDeniedToLoadAlbumsException(e);
-//            } catch (RuntimeException e) {
-//                e.printStackTrace(System.err);
-//                System.out.print("x");
-//            }
-//        }
-//        System.out.printf(" %d albums loaded (%d ms)\n", allAlbums.size(), (System.currentTimeMillis() - startTime));
+        byte retry = 0;
+        try (java.io.FileWriter fw = new java.io.FileWriter("/tmp/all_google_photo_albums.txt")) {
+            while (retry++ < 100) {
+                try {
+                    int i = 1;
+                    for (Album album : googlePhotosAPI.getAllAlbums()) {
+
+                        fw.write("{\"title\": \"");
+                        fw.write(album.title());
+                        fw.write("\", \"id\": \"");
+                        fw.write(album.id());
+                        fw.write("\", \"isWritable\": ");
+                        fw.write(album.isWriteable()?"true":"false");
+                        fw.write("}\n");
+
+                        if (i++ % 100 == 0) {
+                            System.out.print(".");
+                        }
+                        allAlbums.put(album.title(), album);
+                    }
+                    break;
+                } catch (PermissionDeniedException | UnauthenticatedException e) {
+                    throw new PermissionDeniedToLoadAlbumsException(e);
+                } catch (RuntimeException e) {
+                    e.printStackTrace(System.err);
+                    System.out.print("x");
+                }
+            }
+        } catch (java.io.IOException e) {
+            logger.error("Error writing album names to file", e);
+        }
+
+        System.out.printf(" %d albums loaded (%d ms)\n", allAlbums.size(), (System.currentTimeMillis() - startTime));
         return allAlbums;
 
     }
@@ -85,7 +101,7 @@ public class GooglePhotoAlbumManager {
 
     public Album createAlbum(String albumName) {
         logger.info("Creating Fake album {}", albumName);
-        Album album = new Album(albumName, "123", true); //googlePhotosAPI.createAlbum(albumName);
+        Album album = googlePhotosAPI.createAlbum(albumName);
         this.albums.put(albumName, album);
         return album;
     }
@@ -109,7 +125,7 @@ public class GooglePhotoAlbumManager {
 
     public void batchUploadFiles(Album album, List<File> files) {
         logger.info("Album: {}", album.title());
-        final Set<String> albumFileNames = new HashSet<String>(); // googlePhotosAPI.retrieveFilesFromAlbum(album);
+        final Set<String> albumFileNames = googlePhotosAPI.retrieveFilesFromAlbum(album);
 
         List<MediaWithName> mediasToUpload = this.getMediasToUpload(files, albumFileNames);
 
@@ -204,53 +220,6 @@ public class GooglePhotoAlbumManager {
         };
     }
 
-//    private Callable<Void> getWatcherTask(
-//            BlockingQueue<MediaWithName> mediasToUploadQueue,
-//            ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue,
-//            List<MediaWithName> mediasUploaded,
-//            ConcurrentLinkedQueue<MediaTaskLog> progressLog) {
-//
-//        return () -> {
-//            final int BAR_LENGTH = 50;
-//            final String progressBar = String.valueOf('-').repeat(BAR_LENGTH);
-//            final String progressBarPrefix = "Progress: [";
-//            final String progressBarSuffix = "]";
-//            Ansi ansi = Ansi.ansi()
-//                    .cursorToColumn(0)
-//                    .reset()
-//                    .a(progressBarPrefix)
-//                    .a(progressBar)
-//                    .a(progressBarSuffix)
-//                    .reset();
-//            int numResizingTasks = 0;
-//            int numUploadingTasks = 0;
-//            int totalMedias = mediasToUploadQueue.size() + mediasToResizeQueue.size() + mediasUploaded.size();
-//            long startTime = System.currentTimeMillis(); // Start time for overall process
-//
-//            while (!mediasToResizeQueue.isEmpty() || !mediasToUploadQueue.isEmpty()) {
-//                try {
-//                    int uploadedCount = mediasUploaded.size();
-//                    long elapsedTime = System.currentTimeMillis() - startTime; // Elapsed time in milliseconds
-//
-//                    // Calculate estimated time remaining
-//                    String etaMessage = "";
-//                    if (uploadedCount > 0 && elapsedTime > 0) {
-//                        double uploadRate = (double) uploadedCount / elapsedTime; // medias per millisecond
-//                        long remainingMedias = totalMedias - uploadedCount;
-//                        long estimatedTimeRemaining = (long) (remainingMedias / uploadRate); // milliseconds
-//
-//                        long hours = TimeUnit.MILLISECONDS.toHours(estimatedTimeRemaining);
-//                        long minutes = TimeUnit.MILLISECONDS.toMinutes(estimatedTimeRemaining) % 60;
-//                        long seconds = TimeUnit.MILLISECONDS.toSeconds(estimatedTimeRemaining) % 60;
-//                        etaMessage = String.format(" ETA: %02d:%02d:%02d", hours, minutes, seconds);
-//                    }
-//
-//                    int progress = (int) ((double) uploadedCount / totalMedias * 100);
-//                    int filledLength = (int) ((double) progress / 100 *
-//
-
-
-
     private Callable<Void> getWatcherTask(
             BlockingQueue<MediaWithName> mediasToUploadQueue,
             ConcurrentLinkedQueue<MediaWithName> mediasToResizeQueue,
@@ -294,7 +263,7 @@ public class GooglePhotoAlbumManager {
                         long hours = TimeUnit.MILLISECONDS.toHours(estimatedTimeRemaining);
                         long minutes = TimeUnit.MILLISECONDS.toMinutes(estimatedTimeRemaining) % 60;
                         long seconds = TimeUnit.MILLISECONDS.toSeconds(estimatedTimeRemaining) % 60;
-//                        ansi = ansi.a(String.format(" ETA: %02d:%02d:%02d", hours, minutes, seconds));
+                        ansi = ansi.a(String.format(" ETA: %02d:%02d:%02d", hours, minutes, seconds));
                     }
                     MediaTaskLog mediaTaskLog=progressLog.poll();
                     if (mediaTaskLog != null) {

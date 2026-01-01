@@ -157,30 +157,25 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
     }
 
     public String uploadSingleFile(String mediaName, File file) {
-        logger.info("Fake Uploading {}", mediaName);
+        logger.info("Uploading {}", mediaName);
         try {
-            Thread.sleep(1300);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-//        try {
-//            UploadMediaItemRequest uploadRequest =
-//                    UploadMediaItemRequest.newBuilder()
-//                            .setFileName(mediaName)
-//                            .setDataFile(new RandomAccessFile(file, "r"))
-//                            .build();
-//            UploadMediaItemResponse uploadResponse = photosLibraryClient.uploadMediaItem(uploadRequest);
-//            if (uploadResponse.getError().isPresent()) {
-//                UploadMediaItemResponse.Error error = uploadResponse.getError().get();
-//                throw new IOException(error.getCause());
-//            }
-//            String uploadToken = uploadResponse.getUploadToken().get();
+            UploadMediaItemRequest uploadRequest =
+                    UploadMediaItemRequest.newBuilder()
+                            .setFileName(mediaName)
+                            .setDataFile(new RandomAccessFile(file, "r"))
+                            .build();
+            UploadMediaItemResponse uploadResponse = photosLibraryClient.uploadMediaItem(uploadRequest);
+            if (uploadResponse.getError().isPresent()) {
+                UploadMediaItemResponse.Error error = uploadResponse.getError().get();
+                throw new IOException(error.getCause());
+            }
+            String uploadToken = uploadResponse.getUploadToken().get();
             logger.info("Uploaded {}", mediaName);
-//            return uploadToken;
-//        } catch (IOException | ApiException e) {
-//            logger.error("Can't upload file {}", file, e);
-            return "123";
-//        }
+            return uploadToken;
+        } catch (IOException | ApiException e) {
+            logger.error("Can't upload file {}", file, e);
+            return null;
+        }
     }
 
     public Album createAlbum(String albumName) {
@@ -253,32 +248,27 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                 .build();
         InternalPhotosLibraryClient.ListAlbumsPagedResponse listAlbumsResponse = photosLibraryClient.listAlbums(listAlbumsRequest);
         Iterable<com.google.photos.types.proto.Album> albumsIterable = listAlbumsResponse.iterateAll();
-        return new Iterable<Album>() {
+        return () -> {
+            Iterator<com.google.photos.types.proto.Album> iterator = albumsIterable.iterator();
 
-            @Override
-            public Iterator<Album> iterator() {
-                Iterator<com.google.photos.types.proto.Album> iterator = albumsIterable.iterator();
+            return new Iterator<Album>() {
 
-                return new Iterator<Album>() {
+                @Override
+                public boolean hasNext() {
+                    return iterator.hasNext();
+                }
 
-                    @Override
-                    public boolean hasNext() {
-                        return iterator.hasNext();
-                    }
-
-                    @Override
-                    public Album next() {
-                        com.google.photos.types.proto.Album googleAlbum = iterator.next();
-                        return googleAlbum2Album(googleAlbum);
-                    }
-                };
-            }
+                @Override
+                public Album next() {
+                    com.google.photos.types.proto.Album googleAlbum = iterator.next();
+                    return googleAlbum2Album(googleAlbum);
+                }
+            };
         };
     }
 
     public static Album googleAlbum2Album(com.google.photos.types.proto.Album googleAlbum) {
-        Album album = new Album(googleAlbum.getTitle(), googleAlbum.getId(), googleAlbum.getIsWriteable());
-        return album;
+        return new Album(googleAlbum.getTitle(), googleAlbum.getId(), googleAlbum.getIsWriteable());
     }
 
 }
