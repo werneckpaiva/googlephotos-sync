@@ -11,6 +11,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class SyncStatusWatcher {
+    private static final int BAR_WIDTH = 40;
 
     public record MediaTaskLog(Status status, int workerIndex, MediaWithName media, int count) {
 
@@ -78,7 +79,7 @@ public class SyncStatusWatcher {
 
             long elapsedMs = System.currentTimeMillis() - progress.startTime;
             String elapsedStr = formatTime(elapsedMs);
-            String bar = "=".repeat(20);
+            String bar = "=".repeat(BAR_WIDTH);
             System.out.println(String.format("Syncing 100%% | %s | %d/%d (%s / %s) - Album %s completed.",
                     bar, totalMedias, totalMedias, elapsedStr, elapsedStr, album.title()));
             System.out.flush();
@@ -165,11 +166,10 @@ public class SyncStatusWatcher {
 
     private static String buildProgressLine(String albumName, int completed, int total, long elapsedMs) {
         int percent = (total > 0) ? (completed * 100 / total) : 0;
-        int barWidth = 40;
-        int filled = (total > 0) ? (barWidth * completed) / total : 0;
+        int filled = (total > 0) ? (BAR_WIDTH * completed) / total : 0;
 
         StringBuilder bar = new StringBuilder();
-        for (int i = 0; i < barWidth; i++) {
+        for (int i = 0; i < BAR_WIDTH; i++) {
             bar.append(i < filled ? "=" : " ");
         }
 
