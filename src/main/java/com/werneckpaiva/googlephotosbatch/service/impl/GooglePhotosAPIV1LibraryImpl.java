@@ -136,14 +136,14 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                 .build();
     }
 
-    public Set<String> retrieveFilesFromAlbum(Album album) {
+    public Set<MediaItemInfo> retrieveFilesFromAlbum(Album album) {
         byte retry = 0;
         while (retry++ < 100) {
             try {
                 InternalPhotosLibraryClient.SearchMediaItemsPagedResponse response = photosLibraryClient
                         .searchMediaItems(album.id());
                 return StreamSupport.stream(response.iterateAll().spliterator(), false)
-                        .map(MediaItem::getFilename)
+                        .map(mediaItem -> new MediaItemInfo(mediaItem.getId(), mediaItem.getFilename()))
                         .collect(Collectors.toSet());
             } catch (RuntimeException e) {
                 logger.error("Error: {} retry {}", e.getMessage(), retry);
@@ -279,6 +279,36 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
 
     public static Album googleAlbum2Album(com.google.photos.types.proto.Album googleAlbum) {
         return new Album(googleAlbum.getTitle(), googleAlbum.getId(), googleAlbum.getIsWriteable());
+    }
+
+    @Override
+    public MediaItemsResult listMediaItems(String pageToken) {
+        ListMediaItemsRequest.Builder requestBuilder = ListMediaItemsRequest.newBuilder();
+        if (pageToken != null && !pageToken.isEmpty()) {
+            requestBuilder.setPageToken(pageToken);
+        }
+        InternalPhotosLibraryClient.ListMediaItemsPagedResponse response = photosLibraryClient
+                .listMediaItems(requestBuilder.build());
+
+        Iterable<MediaItem> mediaItemsIterable = response.getPage().getValues();
+        String nextPageToken = response.getNextPageToken();
+
+        Iterable<MediaItemInfo> items = () -> {
+            Iterator<MediaItem> iterator = mediaItemsIterable.iterator();
+            return new Iterator<MediaItemInfo>() {
+                @Override
+                public boolean hasNext() {
+                    return iterator.hasNext();
+                }
+
+                @Override
+                public MediaItemInfo next() {
+                    MediaItem mediaItem = iterator.next();
+                    return new MediaItemInfo(mediaItem.getId(), mediaItem.getFilename());
+                }
+            };
+        };
+        return new MediaItemsResult(items, nextPageToken);
     }
 
 }

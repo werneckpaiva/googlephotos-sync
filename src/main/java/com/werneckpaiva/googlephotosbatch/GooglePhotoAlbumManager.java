@@ -184,7 +184,9 @@ public class GooglePhotoAlbumManager {
     public void batchUploadFiles(Album album, List<File> files) {
         logger.info("Album: {}", album.title());
         final Set<String> albumFileNames = this.skipAlbumLoad ? new HashSet<>()
-                : googlePhotosAPI.retrieveFilesFromAlbum(album);
+                : googlePhotosAPI.retrieveFilesFromAlbum(album).stream()
+                        .map(GooglePhotosAPI.MediaItemInfo::filename)
+                        .collect(Collectors.toSet());
 
         List<MediaWithName> mediasToUpload = this.getMediasToUpload(files, albumFileNames);
 

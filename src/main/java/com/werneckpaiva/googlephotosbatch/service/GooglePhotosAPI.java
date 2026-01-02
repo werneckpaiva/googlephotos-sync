@@ -6,9 +6,16 @@ import java.util.Set;
 
 public interface GooglePhotosAPI {
 
+    record MediaItemsResult(Iterable<MediaItemInfo> items, String nextPageToken) {
+
+    }
+
     void logout();
 
-    Set<String> retrieveFilesFromAlbum(Album album);
+    record MediaItemInfo(String id, String filename) {
+    }
+
+    Set<MediaItemInfo> retrieveFilesFromAlbum(Album album);
 
     String uploadSingleFile(String name, File file);
 
@@ -19,4 +26,6 @@ public interface GooglePhotosAPI {
     Album getAlbum(String albumId);
 
     Iterable<Album> getAllAlbums();
+
+    MediaItemsResult listMediaItems(String pageToken);
 }
