@@ -86,4 +86,38 @@ public class TestGooglePhotoAlbumManagerCache {
         Assertions.assertTrue(albums.containsKey("Valid Album"));
         verify(googlePhotosAPI, never()).getAllAlbums();
     }
+
+    @Test
+    public void testCreateAlbumUpdatesCache() throws PermissionDeniedToLoadAlbumsException, IOException {
+        // Setup
+        File cacheFile = tempDir.resolve("create_album_cache.json").toFile();
+        try (FileWriter writer = new FileWriter(cacheFile)) {
+            writer.write("{\"title\": \"Existing Album\", \"id\": \"existing-id\", \"isWriteable\": true}\n");
+        }
+
+        Album newAlbum = new Album("New Album", "new-id", true);
+        GooglePhotosAPI googlePhotosAPI = mock(GooglePhotosAPI.class);
+        when(googlePhotosAPI.createAlbum("New Album")).thenReturn(newAlbum);
+
+        GooglePhotoAlbumManager manager = new GooglePhotoAlbumManager(googlePhotosAPI);
+        manager.setAlbumsCache(cacheFile);
+
+        // Load existing albums into manager state
+        manager.listAllAlbums();
+
+        // Execute
+        manager.createAlbum("New Album");
+
+        // Verify
+        Map<String, Album> albums = manager.listAllAlbums();
+        Assertions.assertEquals(2, albums.size());
+        Assertions.assertTrue(albums.containsKey("New Album"));
+        Assertions.assertEquals("new-id", albums.get("New Album").id());
+
+        // Verify file content
+        java.util.List<String> lines = java.nio.file.Files.readAllLines(cacheFile.toPath());
+        Assertions.assertEquals(2, lines.size());
+        Assertions.assertTrue(lines.get(1).contains("New Album"));
+        Assertions.assertTrue(lines.get(1).contains("new-id"));
+    }
 }

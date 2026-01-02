@@ -59,7 +59,7 @@ public class GooglePhotoAlbumManager {
         long startTime = System.currentTimeMillis();
         Map<String, Album> allAlbums = new HashMap<>();
         byte retry = 0;
-
+        System.out.print("Loading albums ");
         while (retry++ < 100) {
             try {
                 int i = 1;
@@ -123,6 +123,18 @@ public class GooglePhotoAlbumManager {
         }
     }
 
+    private void appendAlbumToCache(Album album) {
+        if (albumsCache == null)
+            return;
+        logger.info("Appending album {} to cache file: {}", album.title(), albumsCache.getAbsolutePath());
+        try (java.io.FileWriter fw = new java.io.FileWriter(albumsCache, true)) {
+            fw.write(objectMapper.writeValueAsString(album));
+            fw.write("\n");
+        } catch (java.io.IOException e) {
+            logger.error("Error writing album to cache", e);
+        }
+    }
+
     private boolean skipAlbumLoad = false;
 
     private String albumId = null;
@@ -133,6 +145,16 @@ public class GooglePhotoAlbumManager {
 
     public void setAlbumId(String albumId) {
         this.albumId = albumId;
+    }
+
+    private void ensureAlbumsLoaded() throws PermissionDeniedToLoadAlbumsException {
+        if (this.albums == null) {
+            if (this.skipAlbumLoad) {
+                this.albums = new HashMap<>();
+            } else {
+                this.albums = listAllAlbums();
+            }
+        }
     }
 
     public Album getAlbum(String albumName) throws PermissionDeniedToLoadAlbumsException {
@@ -146,20 +168,16 @@ public class GooglePhotoAlbumManager {
             }
             return album;
         }
-        if (this.albums == null) {
-            if (this.skipAlbumLoad) {
-                this.albums = new HashMap<>();
-            } else {
-                this.albums = listAllAlbums();
-            }
-        }
+        ensureAlbumsLoaded();
         return this.albums.get(albumName);
     }
 
-    public Album createAlbum(String albumName) {
+    public Album createAlbum(String albumName) throws PermissionDeniedToLoadAlbumsException {
         logger.info("Creating new album {}", albumName);
+        ensureAlbumsLoaded();
         Album album = googlePhotosAPI.createAlbum(albumName);
         this.albums.put(albumName, album);
+        appendAlbumToCache(album);
         return album;
     }
 
