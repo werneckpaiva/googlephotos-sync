@@ -135,12 +135,13 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                 new AuthorizationCodeInstalledApp.Browser() {
                     @Override
                     public void browse(String url) throws IOException {
+                        String message = "Please open the following address in your browser to authenticate:\n" + url;
                         System.out.println(
                                 "---------------------------------------------------------------------------------------");
-                        System.out.println("Please open the following address in your browser to authenticate:");
-                        System.out.println("  " + url);
+                        System.out.println(message);
                         System.out.println(
                                 "---------------------------------------------------------------------------------------");
+                        logger.info("Authentication required. URL: {}", url);
                     }
                 }).authorize("user");
         return UserCredentials.newBuilder()

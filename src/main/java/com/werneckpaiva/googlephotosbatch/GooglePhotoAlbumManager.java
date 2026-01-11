@@ -162,14 +162,21 @@ public class GooglePhotoAlbumManager {
 
     public Album getAlbum(String albumName) throws PermissionDeniedToLoadAlbumsException {
         if (this.albumId != null) {
-            Album album = googlePhotosAPI.getAlbum(this.albumId);
-            if (this.albums == null) {
-                this.albums = new HashMap<>();
+            try {
+                Album album = googlePhotosAPI.getAlbum(this.albumId);
+                if (this.albums == null) {
+                    this.albums = new HashMap<>();
+                }
+                if (album != null) {
+                    this.albums.put(albumName, album);
+                }
+                return album;
+            } catch (RuntimeException e) {
+                if (isAuthError(e)) {
+                    throw new PermissionDeniedToLoadAlbumsException(e);
+                }
+                throw e;
             }
-            if (album != null) {
-                this.albums.put(albumName, album);
-            }
-            return album;
         }
         ensureAlbumsLoaded();
         return this.albums.get(albumName);
@@ -178,10 +185,17 @@ public class GooglePhotoAlbumManager {
     public Album createAlbum(String albumName) throws PermissionDeniedToLoadAlbumsException {
         logger.info("Creating new album {}", albumName);
         ensureAlbumsLoaded();
-        Album album = googlePhotosAPI.createAlbum(albumName);
-        this.albums.put(albumName, album);
-        appendAlbumToCache(album);
-        return album;
+        try {
+            Album album = googlePhotosAPI.createAlbum(albumName);
+            this.albums.put(albumName, album);
+            appendAlbumToCache(album);
+            return album;
+        } catch (RuntimeException e) {
+            if (isAuthError(e)) {
+                throw new PermissionDeniedToLoadAlbumsException(e);
+            }
+            throw e;
+        }
     }
 
     public void batchUploadFiles(Album album, List<File> files) throws PermissionDeniedToLoadAlbumsException {
