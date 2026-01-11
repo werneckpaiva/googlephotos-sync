@@ -88,6 +88,9 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
     }
 
     public void logout() {
+        if (photosLibraryClient != null) {
+            photosLibraryClient.close();
+        }
         if (CREDENTIALS_DATA_FILE.exists()) {
             deleteFolder(CREDENTIALS_DATA_FILE);
             logger.info("Logged out successfully. Credentials deleted.");
@@ -147,6 +150,9 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                                 mediaItem.getBaseUrl()))
                         .collect(Collectors.toSet());
             } catch (RuntimeException e) {
+                if (isAuthError(e)) {
+                    throw e;
+                }
                 logger.error("Error: {} retry {}", e.getMessage(), retry);
             }
         }
@@ -169,6 +175,9 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
             logger.info("Uploaded {}", mediaName);
             return uploadToken;
         } catch (IOException | ApiException e) {
+            if (isAuthError(e)) {
+                throw new RuntimeException(e);
+            }
             logger.error("Can't upload file {}", file, e);
             return null;
         }
@@ -183,6 +192,9 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                             .toBuilder().setIsWriteable(true).build();
                     return googleAlbum2Album(googleAlbum);
                 } catch (ApiException e) {
+                    if (isAuthError(e)) {
+                        throw e;
+                    }
                     logger.error("Error creating album, retrying after 30s...", e);
                     Thread.sleep(30000);
                 }
@@ -231,6 +243,9 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                     }
                     break;
                 } catch (ExecutionException e) {
+                    if (isAuthError(e)) {
+                        throw new RuntimeException(e);
+                    }
                     logger.error("Error saving items to album, retrying after 30s...", e);
                     Thread.sleep(30000);
                 }
@@ -246,6 +261,9 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
             com.google.photos.types.proto.Album googleAlbum = photosLibraryClient.getAlbum(albumId);
             return googleAlbum2Album(googleAlbum);
         } catch (ApiException e) {
+            if (isAuthError(e)) {
+                throw e;
+            }
             logger.error("Error getting album with ID {}", albumId, e);
             return null;
         }
@@ -347,6 +365,9 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                     photosLibraryClient.batchAddMediaItemsToAlbum(request);
                     break;
                 } catch (ApiException e) {
+                    if (isAuthError(e)) {
+                        throw e;
+                    }
                     logger.error("Error adding items to album {}, retrying after 5s...", albumId, e);
                     Thread.sleep(5000);
                 }
@@ -356,6 +377,16 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                 return;
             }
         }
+    }
+
+    private boolean isAuthError(Throwable e) {
+        if (e == null)
+            return false;
+        String message = e.getMessage();
+        if (message != null && (message.contains("UNAUTHENTICATED") || message.contains("invalid_grant"))) {
+            return true;
+        }
+        return isAuthError(e.getCause());
     }
 
     @Override

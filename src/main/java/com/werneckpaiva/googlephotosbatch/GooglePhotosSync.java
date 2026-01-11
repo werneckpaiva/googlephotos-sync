@@ -86,14 +86,7 @@ public class GooglePhotosSync implements Callable<Integer> {
         URL credentialsURL = getClass().getClassLoader().getResource(CREDENTIALS_JSON);
 
         GooglePhotosAPI googlePhotoService = new GooglePhotosAPIV1LibraryImpl(credentialsURL);
-        GooglePhotoAlbumManager googlePhotosAlbums = new GooglePhotoAlbumManager(googlePhotoService);
-        googlePhotosAlbums.setSkipAlbumLoad(skipLoad);
-        if (albumId != null) {
-            googlePhotosAlbums.setAlbumId(albumId);
-        }
-        if (albumsCache != null) {
-            googlePhotosAlbums.setAlbumsCache(new File(albumsCache));
-        }
+        GooglePhotoAlbumManager googlePhotosAlbums = createAlbumManager(googlePhotoService, skipLoad, albumId);
 
         for (String folderToProcess : foldersToProcess) {
             File folderFile = new File(folderToProcess);
@@ -108,6 +101,8 @@ public class GooglePhotosSync implements Callable<Integer> {
                 } catch (PermissionDeniedToLoadAlbumsException e) {
                     logger.error("Permission denied. New authentication required");
                     googlePhotoService.logout();
+                    googlePhotoService = new GooglePhotosAPIV1LibraryImpl(credentialsURL);
+                    googlePhotosAlbums = createAlbumManager(googlePhotoService, skipLoad, albumId);
                     retries++;
                     if (retries >= 2) {
                         logger.error("Failed to process folder {} after multiple retries. Skipping.", folderToProcess);
@@ -116,6 +111,19 @@ public class GooglePhotosSync implements Callable<Integer> {
             }
         }
 
+    }
+
+    private GooglePhotoAlbumManager createAlbumManager(GooglePhotosAPI googlePhotoService, boolean skipLoad,
+            String albumId) {
+        GooglePhotoAlbumManager googlePhotosAlbums = new GooglePhotoAlbumManager(googlePhotoService);
+        googlePhotosAlbums.setSkipAlbumLoad(skipLoad);
+        if (albumId != null) {
+            googlePhotosAlbums.setAlbumId(albumId);
+        }
+        if (albumsCache != null) {
+            googlePhotosAlbums.setAlbumsCache(new File(albumsCache));
+        }
+        return googlePhotosAlbums;
     }
 
     private void uploadFoldersRecursively(GooglePhotoAlbumManager googlePhotoAlbumManager, String baseFolder, File path)

@@ -73,6 +73,9 @@ public class GooglePhotoAlbumManager {
             } catch (PermissionDeniedException | UnauthenticatedException e) {
                 throw new PermissionDeniedToLoadAlbumsException(e);
             } catch (RuntimeException e) {
+                if (isAuthError(e)) {
+                    throw new PermissionDeniedToLoadAlbumsException(e);
+                }
                 e.printStackTrace(System.err);
                 System.out.print("x");
             }
@@ -181,12 +184,20 @@ public class GooglePhotoAlbumManager {
         return album;
     }
 
-    public void batchUploadFiles(Album album, List<File> files) {
+    public void batchUploadFiles(Album album, List<File> files) throws PermissionDeniedToLoadAlbumsException {
         logger.info("Album: {}", album.title());
-        final Set<String> albumFileNames = this.skipAlbumLoad ? new HashSet<>()
-                : googlePhotosAPI.retrieveFilesFromAlbum(album).stream()
-                        .map(GooglePhotosAPI.MediaItemInfo::filename)
-                        .collect(Collectors.toSet());
+        Set<String> albumFileNames;
+        try {
+            albumFileNames = this.skipAlbumLoad ? new HashSet<>()
+                    : googlePhotosAPI.retrieveFilesFromAlbum(album).stream()
+                            .map(GooglePhotosAPI.MediaItemInfo::filename)
+                            .collect(Collectors.toSet());
+        } catch (RuntimeException e) {
+            if (isAuthError(e)) {
+                throw new PermissionDeniedToLoadAlbumsException(e);
+            }
+            throw e;
+        }
 
         List<MediaWithName> mediasToUpload = this.getMediasToUpload(files, albumFileNames);
 
@@ -243,6 +254,10 @@ public class GooglePhotoAlbumManager {
             uploadAndSaveFuture.get();
             watcherFuture.get();
         } catch (InterruptedException | ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (isAuthError(cause)) {
+                throw new PermissionDeniedToLoadAlbumsException(new RuntimeException(cause));
+            }
             throw new RuntimeException("Error waiting for upload tasks", e);
         } finally {
             taskExecutor.shutdown();
@@ -350,6 +365,16 @@ public class GooglePhotoAlbumManager {
                 .map(file -> new MediaWithName(AlbumUtils.file2MediaName(file), file))
                 .filter(media -> !albumFileNames.contains(media.name()))
                 .collect(Collectors.toList());
+    }
+
+    private boolean isAuthError(Throwable e) {
+        if (e == null)
+            return false;
+        String message = e.getMessage();
+        if (message != null && (message.contains("UNAUTHENTICATED") || message.contains("invalid_grant"))) {
+            return true;
+        }
+        return isAuthError(e.getCause());
     }
 
 }
