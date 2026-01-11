@@ -143,7 +143,8 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                 InternalPhotosLibraryClient.SearchMediaItemsPagedResponse response = photosLibraryClient
                         .searchMediaItems(album.id());
                 return StreamSupport.stream(response.iterateAll().spliterator(), false)
-                        .map(mediaItem -> new MediaItemInfo(mediaItem.getId(), mediaItem.getFilename()))
+                        .map(mediaItem -> new MediaItemInfo(mediaItem.getId(), mediaItem.getFilename(),
+                                mediaItem.getBaseUrl()))
                         .collect(Collectors.toSet());
             } catch (RuntimeException e) {
                 logger.error("Error: {} retry {}", e.getMessage(), retry);
@@ -304,11 +305,75 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                 @Override
                 public MediaItemInfo next() {
                     MediaItem mediaItem = iterator.next();
-                    return new MediaItemInfo(mediaItem.getId(), mediaItem.getFilename());
+                    return new MediaItemInfo(mediaItem.getId(), mediaItem.getFilename(), mediaItem.getBaseUrl());
                 }
             };
         };
         return new MediaItemsResult(items, nextPageToken);
+    }
+
+    @Override
+    public MediaItemInfo getMediaItem(String mediaId) {
+        try {
+            MediaItem mediaItem = photosLibraryClient.getMediaItem(mediaId);
+            return new MediaItemInfo(mediaItem.getId(), mediaItem.getFilename(), mediaItem.getBaseUrl());
+        } catch (Exception e) {
+            logger.error("Error getting media item {}", mediaId, e);
+            throw new RuntimeException("Could not retrieve media item " + mediaId, e);
+        }
+    }
+
+    @Override
+    public void batchAddMediaItems(String albumId, List<String> mediaItemIds) {
+        if (mediaItemIds.isEmpty())
+            return;
+
+        for (int i = 0; i < mediaItemIds.size(); i += ALBUM_BATCH_SIZE) {
+            int toIndex = Math.min(i + ALBUM_BATCH_SIZE, mediaItemIds.size());
+            List<String> batch = mediaItemIds.subList(i, toIndex);
+            batchAddMediaItemsBatch(albumId, batch);
+        }
+    }
+
+    private void batchAddMediaItemsBatch(String albumId, List<String> mediaItemIds) {
+        int retries = 0;
+        while (retries++ < 3) {
+            try {
+                try {
+                    BatchAddMediaItemsToAlbumRequest request = BatchAddMediaItemsToAlbumRequest.newBuilder()
+                            .setAlbumId(albumId)
+                            .addAllMediaItemIds(mediaItemIds)
+                            .build();
+                    photosLibraryClient.batchAddMediaItemsToAlbum(request);
+                    break;
+                } catch (ApiException e) {
+                    logger.error("Error adding items to album {}, retrying after 5s...", albumId, e);
+                    Thread.sleep(5000);
+                }
+            } catch (InterruptedException ex) {
+                logger.error("Retry waiting interrupted");
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    @Override
+    public void updateMediaItemDescription(String mediaId, String description) {
+        try {
+            MediaItem mediaItem = MediaItem.newBuilder()
+                    .setId(mediaId)
+                    .setDescription(description)
+                    .build();
+            com.google.protobuf.FieldMask fieldMask = com.google.protobuf.FieldMask.newBuilder()
+                    .addPaths("description")
+                    .build();
+            photosLibraryClient.updateMediaItem(mediaItem, fieldMask);
+            logger.info("Updated description for media item {}", mediaId);
+        } catch (ApiException e) {
+            logger.error("Error updating media item description for {}", mediaId, e);
+            throw new RuntimeException("Could not update description for media item " + mediaId, e);
+        }
     }
 
 }

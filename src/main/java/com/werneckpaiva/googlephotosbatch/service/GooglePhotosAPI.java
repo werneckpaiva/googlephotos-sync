@@ -12,8 +12,10 @@ public interface GooglePhotosAPI {
 
     void logout();
 
-    record MediaItemInfo(String id, String filename) {
+    record MediaItemInfo(String id, String filename, String baseUrl) {
     }
+
+    MediaItemInfo getMediaItem(String mediaId);
 
     Set<MediaItemInfo> retrieveFilesFromAlbum(Album album);
 
@@ -28,4 +30,8 @@ public interface GooglePhotosAPI {
     Iterable<Album> getAllAlbums();
 
     MediaItemsResult listMediaItems(String pageToken);
+
+    void batchAddMediaItems(String albumId, List<String> mediaItemIds);
+
+    void updateMediaItemDescription(String mediaId, String description);
 }
