@@ -131,7 +131,18 @@ public class GooglePhotosAPIV1LibraryImpl implements GooglePhotosAPI {
                 .setAccessType("offline")
                 .build();
         LocalServerReceiver receiver = new LocalServerReceiver.Builder().build();
-        Credential credential = new AuthorizationCodeInstalledApp(flow, receiver).authorize("user");
+        Credential credential = new AuthorizationCodeInstalledApp(flow, receiver,
+                new AuthorizationCodeInstalledApp.Browser() {
+                    @Override
+                    public void browse(String url) throws IOException {
+                        System.out.println(
+                                "---------------------------------------------------------------------------------------");
+                        System.out.println("Please open the following address in your browser to authenticate:");
+                        System.out.println("  " + url);
+                        System.out.println(
+                                "---------------------------------------------------------------------------------------");
+                    }
+                }).authorize("user");
         return UserCredentials.newBuilder()
                 .setClientId(clientId)
                 .setClientSecret(clientSecret)
